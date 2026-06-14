@@ -1,0 +1,144 @@
+services:
+
+  db:
+    image: mariadb:10.6
+    container_name: callcenter-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-Chang3M3!}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-callcenter}
+      MYSQL_USER: ${MYSQL_USER:-callcenter}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-CallCenter2024!}
+    volumes:
+      - db-data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "3306:3306"
+    networks:
+      - callcenter-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  midpoint:
+    build:
+      context: ./midpoint
+      dockerfile: Dockerfile
+    container_name: callcenter-midpoint
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MP_INIT_DB: "true"
+      MP_MYSQL_HOST: db
+      MP_MYSQL_PORT: 3306
+      MP_MYSQL_DATABASE: midpoint
+      MP_MYSQL_USER: ${MYSQL_USER:-callcenter}
+      MP_MYSQL_PASSWORD: ${MYSQL_PASSWORD:-CallCenter2024!}
+      MP_ADMIN_PASSWORD: ${MP_PASSWORD:-Chang3M3!}
+    volumes:
+      - midpoint-data:/opt/midpoint/var
+    ports:
+      - "8080:8080"
+    networks:
+      - callcenter-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/midpoint"]
+      start_period: 120s
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  asterisk:
+    build:
+      context: ./asterisk
+      dockerfile: Dockerfile
+    container_name: callcenter-asterisk
+    restart: unless-stopped
+    depends_on:
+      midpoint:
+        condition: service_healthy
+    volumes:
+      - asterisk-config:/etc/asterisk
+      - ./asterisk/scripts:/opt/asterisk/scripts:ro
+      - asterisk-log:/var/log/asterisk
+      - asterisk-recordings:/var/spool/asterisk/monitor
+    ports:
+      - "${ASTERISK_SIP_PORT:-5060}:5060/udp"
+      - "${ASTERISK_SIP_PORT:-5060}:5060/tcp"
+      - "5061:5061/tcp"
+      - "8088:8088/tcp"
+      - "8089:8089/tcp"
+      - "5038:5038/tcp"
+      - "${ASTERISK_RTP_START:-10000}-${ASTERISK_RTP_END:-10100}:${ASTERISK_RTP_START:-10000}-${ASTERISK_RTP_END:-10100}/udp"
+    networks:
+      - callcenter-net
+
+  minio:
+    image: minio/minio:latest
+    container_name: callcenter-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - callcenter-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  recorder:
+    build:
+      context: ./recorder
+      dockerfile: Dockerfile
+    container_name: callcenter-recorder
+    restart: unless-stopped
+    depends_on:
+      minio:
+        condition: service_healthy
+      asterisk:
+        condition: service_started
+    volumes:
+      - asterisk-recordings:/recordings:ro
+    networks:
+      - callcenter-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: callcenter-frontend
+    restart: unless-stopped
+    depends_on:
+      asterisk:
+        condition: service_started
+    ports:
+      - "3000:80"
+    networks:
+      - callcenter-net
+
+networks:
+  callcenter-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${DOCKER_NETWORK_SUBNET:-172.20.0.0/16}
+
+volumes:
+  db-data:
+  midpoint-data:
+  asterisk-config:
+  asterisk-log:
+  asterisk-recordings:
+  minio-data:

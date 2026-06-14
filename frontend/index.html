@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CallCenter WebPhone</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>CallCenter WebPhone</h1>
+            <p>Central Telefónica Unificada</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-indicator">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">Desconectado</span>
+            </div>
+            <div>
+                Ext: <span id="extension-display">---</span>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" data-tab="phone" id="tabPhone">Teléfono</button>
+            <button class="tab" data-tab="recordings" id="tabRecordings">Grabaciones</button>
+        </div>
+
+        <!-- Login Form -->
+        <div class="login-form" id="loginForm">
+            <div class="form-group">
+                <label>Extensión SIP</label>
+                <input type="text" id="extension" value="1001" placeholder="1001">
+            </div>
+            <div class="form-group">
+                <label>Contraseña</label>
+                <input type="password" id="password" value="sip1001pass" placeholder="Contraseña">
+            </div>
+            <div class="form-group">
+                <label>Servidor</label>
+                <input type="text" id="server" value="localhost:8088/ws" placeholder="host:port/path">
+            </div>
+            <button class="btn btn-primary" id="loginBtn">Registrar</button>
+        </div>
+
+        <!-- Phone Tab -->
+        <div class="tab-content active" id="phoneTab">
+            <div class="call-section hidden" id="callSection">
+                <div class="dialpad" id="dialpad">
+                    <button class="dial-btn" data-value="1">1</button>
+                    <button class="dial-btn" data-value="2">2</button>
+                    <button class="dial-btn" data-value="3">3</button>
+                    <button class="dial-btn" data-value="4">4</button>
+                    <button class="dial-btn" data-value="5">5</button>
+                    <button class="dial-btn" data-value="6">6</button>
+                    <button class="dial-btn" data-value="7">7</button>
+                    <button class="dial-btn" data-value="8">8</button>
+                    <button class="dial-btn" data-value="9">9</button>
+                    <button class="dial-btn" data-value="*">*</button>
+                    <button class="dial-btn" data-value="0">0</button>
+                    <button class="dial-btn" data-value="#">#</button>
+                </div>
+
+                <div class="call-input">
+                    <input type="text" id="targetExtension" placeholder="Extensión destino" maxlength="4">
+                </div>
+
+                <div class="call-actions">
+                    <button class="btn btn-success" id="callBtn">Llamar</button>
+                    <button class="btn btn-danger hidden" id="hangupBtn">Colgar</button>
+                    <button class="btn btn-danger" id="logoutBtn">Salir</button>
+                </div>
+
+                <div class="audio-controls">
+                    <audio id="remoteAudio" autoplay></audio>
+                </div>
+            </div>
+
+            <div class="call-log">
+                <h3>Registro de llamadas</h3>
+                <div class="log-entries" id="logEntries">
+                    <div class="log-entry" style="color: #64748b;">
+                        <span>Inicia sesión para ver llamadas</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recordings Tab -->
+        <div class="tab-content" id="recordingsTab">
+            <div class="recordings-header">
+                <h3>Grabaciones de llamadas</h3>
+                <button class="btn btn-primary" id="refreshRecordings" style="width:auto; padding:6px 16px; font-size:12px;">Actualizar</button>
+            </div>
+            <div class="recordings-list" id="recordingsList">
+                <div class="loading">Cargando grabaciones...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Incoming call notification -->
+    <div class="incoming-call hidden" id="incomingCall">
+        <div class="incoming-call-content">
+            <div class="incoming-call-icon">&#x1F4DE;</div>
+            <p>Llamada entrante de <strong id="callerName">...</strong></p>
+            <div class="incoming-call-actions">
+                <button class="btn btn-success" id="answerBtn">Responder</button>
+                <button class="btn btn-danger" id="rejectBtn">Rechazar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/sip.js?v=3"></script>
+    <script src="js/app.js?v=2"></script>
+</body>
+</html>
