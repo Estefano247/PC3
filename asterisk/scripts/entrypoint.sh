@@ -31,5 +31,11 @@ fi
 # Ensure proper permissions
 chown -R asterisk:asterisk "${CONFIG_DIR}" 2>/dev/null || true
 
+# Start SSH daemon for midPoint provisioning
+if [ -f /usr/sbin/sshd ]; then
+    echo "Starting SSH daemon..."
+    /usr/sbin/sshd
+fi
+
 # Start Asterisk
 exec asterisk -f -vvv -C "${CONFIG_DIR}/asterisk.conf"

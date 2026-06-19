@@ -3,75 +3,88 @@
 ## Arquitectura de Integración
 
 ```
-┌──────────────┐     ScriptedSQL      ┌──────────────┐
-│   MariaDB    │◄────────────────────►│   midPoint   │
-│  (users DB)  │   JDBC Connector     │  (IAM Core)  │
-└──────────────┘                      └──────┬───────┘
-                                             │
-                                   Groovy Script
-                                   (Synchronization
-                                    Reaction)
-                                             │
-                                    ┌────────▼────────┐
-                                    │  provision-     │
-                                    │  asterisk.py    │
-                                    │  (Python)       │
-                                    └────────┬────────┘
-                                             │
-                                  HTTP / ARI  │  SSH
-                                             │
-                                    ┌────────▼────────┐
-                                    │   Asterisk      │
-                                    │  (PBX / PJSIP)  │
-                                    └─────────────────┘
+┌──────────────────┐   DatabaseTable    ┌──────────────┐
+│   PostgreSQL 15   │◄─────────────────►│   midPoint    │
+│  (callcenter DB)  │   Connector       │  (IAM Core)   │
+│    - users        │   (Live Sync)     │               │
+│    - cdr          │                   │  - Object     │
+│    - audit_log    │                   │    Template   │
+└──────────────────┘                   │    (Mappings) │
+                                        │  - Role       │
+                                        │    Inducement │
+                                        └──────┬───────┘
+                                               │
+                                     Groovy Mappings
+                                     (generan sip_extension
+                                      y sip_password)
+                                               │
+                                     (escribe en users.sip_extension
+                                      y users.sip_password)
+                                               │
+                                     ┌────────▼────────┐
+                                     │   PostgreSQL     │
+                                     │  extconfig.conf  │
+                                     │  consulta users  │
+                                     └────────┬────────┘
+                                               │
+                                     ┌────────▼────────┐
+                                     │   Asterisk       │
+                                     │  (PBX / PJSIP)   │
+                                     │  extconfig.conf  │
+                                     └──────────────────┘
 ```
 
 ## Flujo de Aprovisionamiento
 
-1. **Usuario nuevo** se inserta en `users` de MariaDB con `role = AgenteCallCenter`
-2. **midPoint** ejecuta Live Sync cada N segundos consultando la BD vía ScriptedSQL
-3. **Correlación**: midPoint identifica si el usuario existe en su repositorio interno por `username`
-4. **Situación**: Si es nuevo → `linked`, si se elimina → `unlinked`
-5. **Reacción** (Groovy): Cuando `situation = linked` y `role = AgenteCallCenter`, ejecuta:
-   ```groovy
-   Runtime.getRuntime().exec(["python3", "/opt/midpoint/scripts/provision-asterisk.py",
-       id, name, telephoneNumber, password, fullName])
-   ```
-6. **Python script**: `provision-asterisk.py` intenta:
-   - **Primario**: Llamar a la ARI de Asterisk vía HTTP (puerto 8088)
-   - **Fallback**: Ejecutar `provision_extension.sh` dentro del contenedor
-7. **Shell script**: `provision_extension.sh` añade al `pjsip.conf` y ejecuta `pjsip reload`
-8. **Softphone**: El agente configura su softphone con extensión y contraseña → se registra
+1. **Usuario nuevo** se crea en midPoint UI con rol `AgenteCallCenter`
+2. **midPoint** ejecuta Live Sync cada N segundos consultando la tabla `users` de PostgreSQL vía DatabaseTableConnector
+3. **Correlación**: midPoint correlaciona el usuario por `username` en su repositorio interno
+4. **Object Template**: midPoint aplica el object template con mappings Groovy que:
+   - Generan `sip_extension` automáticamente (desde el username, empezando en 1100)
+   - Generan `sip_password` aleatorio
+   - Mapean `role` del usuario al recurso
+5. **Escritura en BD**: Los mappings escriben `sip_extension` y `sip_password` en la tabla `users` de PostgreSQL
+6. **Asterisk lee configuración**: Via `extconfig.conf`, Asterisk consulta `users` en PostgreSQL directamente (no requiere recarga)
+7. **Softphone**: El agente configura su softphone con extensión y contraseña → se registra
+
+> **Nota:** A diferencia de versiones anteriores, ya no se usa ARI ni ScriptedSQL. midPoint escribe directamente en la BD y Asterisk lee desde `extconfig.conf` con consultas SQL en tiempo real. El script `provision-asterisk.py` solo se usa para operaciones vía SSH cuando es necesario forzar una recarga.
 
 ## Recursos de midPoint Creados
 
 | Recurso | OID | Archivo | Propósito |
 |---------|-----|---------|-----------|
-| CallCenter DB | `...0001` | `resource-scripted-sql.xml` | Conector a MariaDB vía ScriptedSQL |
-| Rol AgenteCallCenter | `...0010` | `role-agentecallcenter.xml` | Rol con inducción para aprovisionar SIP |
-| Object Template | `...0020` | `object-template-user.xml` | Mappings para generación de extensión |
+| CallCenter DB | `c0ffee01-c0ff-ee01-c0ff-ee01c0ffee01` | `resource-scripted-sql.xml` | Conector a PostgreSQL vía DatabaseTableConnector (tabla `users`) |
+| Rol AgenteCallCenter | `a1b2c3d4-e5f6-7890-abcd-ef1234567890` | `role-agentecallcenter.xml` | Rol con inducción para aprovisionar SIP |
+| Object Template | `b2c3d4e5-f6a7-8901-bcde-f12345678901` | `object-template-user.xml` | Mappings Groovy para generación de extensión y password |
 
 ## Configuración de Sync en midPoint
 
-1. **Importar recursos** (vía API REST o interfaz web):
+1. **Los recursos se importan automáticamente** en el primer arranque via `init-midpoint.sh`:
    ```bash
-   # Import resource
-   curl -u administrator:Chang3M3! -X POST \
+   # Entrypoint personalizado que:
+   # 1. Inicia midPoint en background
+   # 2. Espera healthcheck OK (/actuator/health)
+   # 3. Ejecuta import-all.sh:
+   curl -u administrator:5ecr3t -X POST \
      -H "Content-Type: application/xml" \
      -d @/opt/midpoint/init/resource-scripted-sql.xml \
-     http://localhost:8080/midpoint/ws/rest/resources/import
+     http://localhost:8080/midpoint/ws/rest/resources
 
-   # Import role
-   curl -u administrator:Chang3M3! -X POST \
+   curl -u administrator:5ecr3t -X POST \
      -H "Content-Type: application/xml" \
      -d @/opt/midpoint/init/role-agentecallcenter.xml \
-     http://localhost:8080/midpoint/ws/rest/roles/import
+     http://localhost:8080/midpoint/ws/rest/roles
+
+   curl -u administrator:5ecr3t -X POST \
+     -H "Content-Type: application/xml" \
+     -d @/opt/midpoint/init/object-template-user.xml \
+     http://localhost:8080/midpoint/ws/rest/objectTemplates
    ```
 
 2. **Verificar sincronización** en midPoint UI:
    - Resource → CallCenter DB → Synchronization → Status
    - Users → Buscar usuario sincronizado
-   - Debe mostrar "Linked" para usuarios con extensión SIP
+   - Los usuarios con rol `AgenteCallCenter` deben tener `sip_extension` y `sip_password` poblados
 
 ## Pruebas Unitarias
 
@@ -106,9 +119,9 @@ pwsh tests/integration/test-audit-security.ps1
 | Síntoma | Causa | Solución |
 |---------|-------|----------|
 | midPoint no ve nuevos usuarios | Live Sync no activado | Verificar recurso → Sync → Enable |
-| Script de provision no se ejecuta | Groovy no encuentra python3 | Usar ruta absoluta `/usr/bin/python3` |
-| Extension duplicada | pjsip.conf tiene entradas repetidas | El script ya maneja duplicados (grep previo) |
-| ARI rechaza conexión | Credenciales incorrectas | Verificar `ari.conf` usuario/password |
-| pjsip reload falla | Permisos de escritura | Asegurar que `/etc/asterisk` es writable |
-| Softphone no registra | Puerto no expuesto | Verificar `docker compose ps` puerto 5060 |
-| CDR vacío | cdr_mysql.conf incorrecto | Verificar host/port/user/pass en el archivo |
+| No se genera extensión SIP | Mappings del object template no aplican | Verificar que el rol `AgenteCallCenter` esté asignado |
+| midPoint no arranca | PostgreSQL no ready | Esperar 2-3 min, verificar `docker compose logs db` |
+| Extension duplicada | Conflictos en tabla `users` | Verificar `sip_extension` único en BD |
+| Softphone no registra | Puerto no expuesto | Verificar `docker compose ps` puerto 5060/8088 |
+| CDR vacío | `extconfig.conf` mal configurado | Verificar conexión a PostgreSQL desde Asterisk |
+| Fallo en import inicial | midPoint no responde aún | El script `init-midpoint.sh` reintenta hasta que el healthcheck OK |

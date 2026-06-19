@@ -21,6 +21,8 @@ const UI = {
 
 let simpleUser = null;
 let currentSession = null;
+let isInCall = false;
+let isReady = false;
 
 function setStatus(text, type) {
     UI.statusText.textContent = text;
@@ -79,6 +81,7 @@ function register() {
                     setStatus('Conectado, registrando...');
                     simpleUser.register()
                         .then(() => {
+                            isReady = true;
                             setStatus(`Registrado como ${extension}`, 'registered');
                             UI.extensionDisplay.textContent = extension;
                             UI.loginForm.classList.add('hidden');
@@ -105,6 +108,7 @@ function register() {
                     setStatus('Desregistrado');
                 },
                 onCallReceived: (session) => {
+                    if (!isReady || isInCall) return;
                     currentSession = session;
                     const fromDisplay = session?.remoteIdentity?.displayName || '';
                     const fromUser = session?.remoteIdentity?.uri?.user || 'desconocido';
@@ -117,12 +121,14 @@ function register() {
                     addLogEntry('incoming', caller, 'Entrante');
                 },
                 onCallAnswered: () => {
+                    isInCall = true;
                     UI.incomingCall.classList.add('hidden');
                     setStatus('En llamada...', 'connected');
                     UI.callBtn.classList.add('hidden');
                     UI.hangupBtn.classList.remove('hidden');
                 },
                 onCallHangup: () => {
+                    isInCall = false;
                     UI.incomingCall.classList.add('hidden');
                     currentSession = null;
                     setStatus('Registrado', 'registered');
@@ -156,14 +162,20 @@ function makeCall() {
     setStatus('Llamando a ' + target + '...');
     addLogEntry('outgoing', target, 'Llamando');
 
-    const targetUri = `sip:${target}@${location.hostname}`;
+    const host = document.getElementById('server').value.trim().split(':')[0].replace(/^ws:\/\//, '') || location.hostname;
+    const targetUri = `sip:${target}@${host}`;
 
     simpleUser.call(targetUri)
         .then(() => {
+            isInCall = true;
+            UI.callBtn.classList.add('hidden');
+            UI.hangupBtn.classList.remove('hidden');
             addLogEntry('outgoing', target, 'Conectada');
         })
         .catch((err) => {
             setStatus('Error: ' + err.message);
+            UI.callBtn.classList.remove('hidden');
+            UI.hangupBtn.classList.add('hidden');
             addLogEntry('outgoing', target, 'Error');
         });
 }
@@ -172,6 +184,8 @@ function hangup() {
     if (simpleUser) {
         simpleUser.hangup()
             .then(() => {
+                isInCall = false;
+                currentSession = null;
                 setStatus('Registrado', 'registered');
                 UI.callBtn.classList.remove('hidden');
                 UI.hangupBtn.classList.add('hidden');
@@ -182,6 +196,10 @@ function hangup() {
 }
 
 function logout() {
+    isInCall = false;
+    isReady = false;
+    currentSession = null;
+    UI.incomingCall.classList.add('hidden');
     if (simpleUser) {
         simpleUser.disconnect()
             .catch(() => {});
@@ -291,6 +309,7 @@ UI.logoutBtn.addEventListener('click', logout);
 
 UI.answerBtn.addEventListener('click', () => {
     UI.incomingCall.classList.add('hidden');
+    isInCall = true;
     if (simpleUser) {
         simpleUser.answer()
             .then(() => {
@@ -299,8 +318,13 @@ UI.answerBtn.addEventListener('click', () => {
                 UI.hangupBtn.classList.remove('hidden');
             })
             .catch(() => {
+                isInCall = false;
                 setStatus('Registrado', 'registered');
+                UI.callBtn.classList.remove('hidden');
+                UI.hangupBtn.classList.add('hidden');
             });
+    } else {
+        isInCall = false;
     }
 });
 
@@ -309,9 +333,16 @@ UI.rejectBtn.addEventListener('click', () => {
     if (simpleUser) {
         simpleUser.decline()
             .then(() => {
+                isInCall = false;
+                currentSession = null;
                 setStatus('Registrado', 'registered');
+                UI.callBtn.classList.remove('hidden');
+                UI.hangupBtn.classList.add('hidden');
             })
             .catch(() => {});
+    } else {
+        isInCall = false;
+        currentSession = null;
     }
 });
 

@@ -12,12 +12,12 @@
     <inducement>
         <description>Provision SIP extension on Asterisk</description>
         <construction>
-            <resourceRef oid="00000000-0000-0000-0000-000000000001"
-                         type="ResourceType"/>
+<resourceRef oid="c0ffee01-c0ff-ee01-c0ff-ee01c0ffee01"
+                 type="ResourceType"/>
             <kind>account</kind>
             <intent>agent</intent>
             <attribute>
-                <c:ref>ri:telephoneNumber</c:ref>
+                <c:ref>ri:sip_extension</c:ref>
                 <outbound>
                     <source>
                         <path>telephoneNumber</path>

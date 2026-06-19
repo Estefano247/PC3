@@ -1,23 +1,21 @@
 services:
 
   db:
-    image: mariadb:10.6
+    image: postgres:15
     container_name: callcenter-db
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-Chang3M3!}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-callcenter}
-      MYSQL_USER: ${MYSQL_USER:-callcenter}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-CallCenter2024!}
+      POSTGRES_USER: ${POSTGRES_USER:-callcenter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CallCenter2024!}
+      POSTGRES_DB: ${POSTGRES_DB:-callcenter}
     volumes:
-      - db-data:/var/lib/mysql
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    ports:
-      - "3306:3306"
+      - db-data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+      - ./db/init-midpoint.sql:/docker-entrypoint-initdb.d/002-midpoint-schema.sql:ro
     networks:
       - callcenter-net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: pg_isready -U ${POSTGRES_USER:-callcenter} -d ${POSTGRES_DB:-callcenter}
       interval: 10s
       timeout: 5s
       retries: 5
@@ -31,16 +29,20 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    command: ["/opt/midpoint/scripts/init-midpoint.sh"]
     environment:
       MP_INIT_DB: "true"
-      MP_MYSQL_HOST: db
-      MP_MYSQL_PORT: 3306
-      MP_MYSQL_DATABASE: midpoint
-      MP_MYSQL_USER: ${MYSQL_USER:-callcenter}
-      MP_MYSQL_PASSWORD: ${MYSQL_PASSWORD:-CallCenter2024!}
       MP_ADMIN_PASSWORD: ${MP_PASSWORD:-Chang3M3!}
+      MP_SET_midpoint_repository_type: native
+      MP_SET_midpoint_repository_database: postgresql
+      MP_SET_midpoint_repository_jdbcUrl: jdbc:postgresql://db:5432/midpoint
+      MP_SET_midpoint_repository_jdbcUsername: ${POSTGRES_USER:-callcenter}
+      MP_SET_midpoint_repository_jdbcPassword: ${POSTGRES_PASSWORD:-CallCenter2024!}
+      MP_SET_midpoint_repository_missingSchemaAction: create
+      MP_SET_midpoint_repository_upgradeableSchemaAction: stop
     volumes:
       - midpoint-data:/opt/midpoint/var
+      - ./midpoint/config/config.xml:/opt/midpoint/var/config.xml
     ports:
       - "8080:8080"
     networks:
@@ -69,10 +71,7 @@ services:
     ports:
       - "${ASTERISK_SIP_PORT:-5060}:5060/udp"
       - "${ASTERISK_SIP_PORT:-5060}:5060/tcp"
-      - "5061:5061/tcp"
       - "8088:8088/tcp"
-      - "8089:8089/tcp"
-      - "5038:5038/tcp"
       - "${ASTERISK_RTP_START:-10000}-${ASTERISK_RTP_END:-10100}:${ASTERISK_RTP_START:-10000}-${ASTERISK_RTP_END:-10100}/udp"
     networks:
       - callcenter-net
@@ -89,7 +88,6 @@ services:
       - minio-data:/data
     ports:
       - "9000:9000"
-      - "9001:9001"
     networks:
       - callcenter-net
     healthcheck:

@@ -4,7 +4,7 @@
 
 | ID | Como... | Quiero... | Para... | Prioridad | Fase |
 |----|---------|-----------|---------|-----------|------|
-| US-001 | DevOps | tener Docker Compose con MariaDB, midPoint y Asterisk | que el entorno se levante con un solo comando | Alta | 1 |
+| US-001 | DevOps | tener Docker Compose con PostgreSQL, midPoint y Asterisk | que el entorno se levante con un solo comando | Alta | 1 |
 | US-002 | DevOps | que los contenedores se comuniquen en una red aislada | evitar accesos no autorizados entre servicios | Alta | 1 |
 | US-003 | Admin | que la BD inicialice con el esquema de usuarios, CDR y auditoría | tener la estructura de datos lista al arrancar | Alta | 1 |
 
@@ -12,7 +12,7 @@
 
 | ID | Como... | Quiero... | Para... | Prioridad | Fase |
 |----|---------|-----------|---------|-----------|------|
-| US-004 | Admin | configurar midPoint con un recurso Scripted SQL | leer usuarios desde MariaDB | Alta | 2 |
+| US-004 | Admin | configurar midPoint con un recurso DatabaseTable Connector | leer usuarios desde PostgreSQL | Alta | 2 |
 | US-005 | Admin | que midPoint sincronice usuarios con rol AgenteCallCenter | que automaticamente se creen extensiones SIP | Alta | 3 |
 | US-006 | Admin | que midPoint audite quién accedió a qué extensión | cumplir ISO 27001 A.8.16 | Alta | 4 |
 

@@ -13,7 +13,7 @@
         <strength>strong</strength>
         <expression>
             <script>
-                <code>
+                <code><![CDATA[
                     // Auto-generate extension if user has AgenteCallCenter role
                     // Extensions start at 1100 and increment
                     import com.evolveum.midpoint.prism.PrismObject
@@ -30,7 +30,7 @@
                         return String.valueOf(maxExt + (Math.abs(user.getName().getOrig().hashCode()) % 100))
                     }
                     return user.getTelephoneNumber()
-                </code>
+                ]]></code>
             </script>
         </expression>
         <target>
@@ -43,7 +43,7 @@
         <strength>weak</strength>
         <expression>
             <script>
-                <code>
+                <code><![CDATA[
                     // Map the role assignment from user to resource attribute
                     def user = focus
                     def role = user.getAssignment()
@@ -53,7 +53,7 @@
                         return "AgenteCallCenter"
                     }
                     return "User"
-                </code>
+                ]]></code>
             </script>
         </expression>
         <target>

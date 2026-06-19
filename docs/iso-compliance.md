@@ -9,17 +9,17 @@
 | **A.8.1.1** | Inventory of assets | Docker Compose | All services declared in docker-compose.yml with versioning |
 | **A.8.2.1** | Classification of information | midPoint | Roles (AgenteCallCenter, Supervisor, Admin) with RBAC |
 | **A.8.2.3** | Handling of assets | Scripts | Automated provisioning/deprovisioning scripts |
-| **A.8.16** | Monitoring activities | midPoint / Audit Log | `audit_log` table records who logged in and accessed which extension |
-| **A.9.1.2** | Access to networks | Docker networks | Isolated `callcenter-net` bridge network |
-| **A.9.2.1** | User registration & de-registration | midPoint | Identity lifecycle management via Scripted SQL resource |
-| **A.9.2.2** | User access provisioning | midPoint → Asterisk | Automatic SIP extension creation on role assignment |
+| **A.8.16** | Monitoring activities | midPoint / Audit Log | `audit_log` table in PostgreSQL records who logged in and accessed which extension |
+| **A.9.1.2** | Access to networks | Docker networks | Isolated `callcenter-net` bridge network (172.20.0.0/16) |
+| **A.9.2.1** | User registration & de-registration | midPoint | Identity lifecycle management via DatabaseTable Connector (Live Sync) |
+| **A.9.2.2** | User access provisioning | midPoint → Asterisk | Automatic SIP extension provisioning via object template mappings |
 | **A.9.2.4** | Management of secret authentication info | Docker secrets / .env | SIP passwords stored in env vars, not in code |
 | **A.9.4.2** | Secure log-on procedures | midPoint / SIP digest | Authentication required for midPoint UI and SIP registration |
-| **A.10.1.1** | Policy on use of cryptographic controls | Asterisk TLS | TLS configured on SIP transport (port 5061) |
-| **A.12.4.1** | Event logging | Asterisk CDR / Audit | CDR in MariaDB + audit_log table for traceability |
+| **A.10.1.1** | Policy on use of cryptographic controls | SSH / Docker | Provisioning via SSH with forced commands; internal network isolation |
+| **A.12.4.1** | Event logging | Asterisk CDR / Audit | CDR in PostgreSQL + `audit_log` table for traceability |
 | **A.12.6.1** | Management of technical vulnerabilities | Trivy | `trivy-scan.sh` scans Docker images for CVEs |
 | **A.13.1.1** | Network controls | Docker + Firewall | Internal bridge network, exposed ports limited to required ones |
-| **A.13.2.1** | Information transfer policies | TLS | SIP over TLS (port 5061), database connections internal |
+| **A.13.2.1** | Information transfer policies | Internal network | All database connections internal to Docker bridge network |
 
 ## ISO 25010 Quality Metrics
 
@@ -28,12 +28,12 @@
 | **Functional Suitability** | Functional completeness | User creates → extension provisioned | Integration test (midPoint → Asterisk) |
 | **Reliability** | Availability | Containers restart=unless-stopped | docker-compose ps, uptime checks |
 | | Recoverability | Volume persistence (db-data, midpoint-data) | Restart test: docker-compose down && up |
-| **Security** | Confidentiality | TLS on SIP, passwords hashed | openssl s_client, log inspection |
+| **Security** | Confidentiality | Network isolation (Docker bridge), SSH with keys | Network scan, log inspection |
 | | Integrity | midPoint as source of truth | Reconciliation sync |
 | | Non-repudiation | audit_log table | SELECT * FROM audit_log |
 | **Maintainability** | Modularity | Microservices architecture | Docker Compose services |
 | | Reusability | Scripts and configs versioned | Git tags, semantic versioning |
 | | Testability | Automated tests | Unit tests (mappings), integration tests (API), load tests (sipp) |
-| **Compatibility** | Interoperability | midPoint ↔ Asterisk ↔ MariaDB | Cross-container communication tests |
+| **Compatibility** | Interoperability | midPoint ↔ Asterisk ↔ PostgreSQL | Cross-container communication tests |
 | **Performance Efficiency** | Time behavior | Call setup time | CDR duration/billsec fields |
 | | Capacity | 10 concurrent calls | SIPp load test results |

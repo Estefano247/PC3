@@ -30,3 +30,7 @@ tmp/
 **/secrets/
 *.pem
 *.key
+
+# Build context copies of SSH keys
+midpoint/ssh/
+asterisk/ssh/

@@ -11,11 +11,14 @@ set -euo pipefail
 ASTERISK_CONFIG="/etc/asterisk"
 PJSIP_CONF="${ASTERISK_CONFIG}/pjsip.conf"
 
+ASTERISK_CMD="sudo -u asterisk asterisk"
+
 function add_extension() {
     local username="$1"
     local extension="$2"
     local password="$3"
-    local display_name="${4:-$username}"
+    shift 3
+    local display_name="${*:-$username}"
 
     if grep -q "^\[${extension}\]" "$PJSIP_CONF"; then
         echo "Extension ${extension} already exists, skipping"
@@ -24,17 +27,20 @@ function add_extension() {
 
     cat >> "$PJSIP_CONF" <<EOF
 
-[${extension}](!)
+[${extension}]
 type = endpoint
 context = callcenter
 disallow = all
 allow = ulaw
 allow = alaw
-auth = ${extension}
+auth = ${extension}-auth
 aors = ${extension}
 callerid = "${display_name}" <${extension}>
+webrtc = yes
+transport = transport-ws
+identify_by = username
 
-[${extension}]
+[${extension}-auth]
 type = auth
 auth_type = userpass
 password = ${password}
@@ -43,10 +49,9 @@ username = ${extension}
 [${extension}]
 type = aor
 max_contacts = 1
-qualify_frequency = 30
 EOF
 
-    asterisk -rx "pjsip reload" || true
+    ${ASTERISK_CMD} -rx "module reload res_pjsip.so" || true
     echo "Extension ${extension} provisioned successfully"
 }
 
@@ -54,7 +59,7 @@ function remove_extension() {
     local extension="$1"
 
     sed -i "/^\[${extension}\]/,/^$/d" "$PJSIP_CONF"
-    asterisk -rx "pjsip reload" || true
+    ${ASTERISK_CMD} -rx "module reload res_pjsip.so" || true
     echo "Extension ${extension} removed successfully"
 }
 

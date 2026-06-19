@@ -58,11 +58,29 @@ RUN mkdir -p /var/log/asterisk /var/run/asterisk /var/spool/asterisk /var/spool/
     && adduser --system --ingroup asterisk asterisk \
     && chown -R asterisk:asterisk /var/log/asterisk /var/run/asterisk /var/spool/asterisk
 
+# SSH provision user setup
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-server sudo \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /var/run/sshd \
+    && adduser --disabled-password --gecos "" provision \
+    && adduser provision asterisk \
+    && mkdir -p /home/provision/.ssh \
+    && chmod 700 /home/provision/.ssh \
+    && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config \
+    && echo "provision ALL=(ALL) NOPASSWD: /usr/sbin/asterisk" >> /etc/sudoers.d/provision \
+    && chmod 440 /etc/sudoers.d/provision
+
 COPY config/ /etc/asterisk.default/
 COPY scripts/ /opt/asterisk/scripts/
+COPY ssh/provision-key.pub /tmp/provision-key.pub
 
-RUN chmod +x /opt/asterisk/scripts/*.sh
+RUN chmod +x /opt/asterisk/scripts/*.sh \
+    && echo 'restrict,command="/opt/asterisk/scripts/provision_extension.sh $SSH_ORIGINAL_COMMAND" '"$(cat /tmp/provision-key.pub)" \
+       > /home/provision/.ssh/authorized_keys \
+    && chmod 600 /home/provision/.ssh/authorized_keys \
+    && chown -R provision:provision /home/provision/.ssh \
+    && rm -f /tmp/provision-key.pub
 
-EXPOSE 5060/udp 5060/tcp 5061/tcp 8088/tcp 8089/tcp 5038/tcp 10000-10100/udp
+EXPOSE 5060/udp 5060/tcp 8088/tcp 10000-10100/udp
 
 ENTRYPOINT ["/opt/asterisk/scripts/entrypoint.sh"]

@@ -1,243 +1,149 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<resource oid="00000000-0000-0000-0000-000000000001"
-          xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
-          xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
-          xmlns:ri="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3"
-          xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-          xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3"
-          xmlns:sql="http://midpoint.evolveum.com/xml/ns/public/connector/scriptedsql/resource-schema-3">
+<resource oid="c0ffee01-c0ff-ee01-c0ff-ee01c0ffee01"
+    xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+    xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+    xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3"
+    xmlns:ri="http://midpoint.evolveum.com/xml/ns/public/resource/instance-3"
+    xmlns:icfs="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/resource-schema-3"
+    xmlns:icfc="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/connector-schema-3">
 
     <name>CallCenter DB</name>
 
     <connectorRef type="ConnectorType">
         <filter>
-            <q:equal xmlns:q="http://prism.evolveum.com/xml/ns/public/query-3">
-                <q:path>connectorType</q:path>
-                <q:value>ScriptedSQL</q:value>
+            <q:equal>
+                <q:path>c:connectorType</q:path>
+                <q:value>org.identityconnectors.databasetable.DatabaseTableConnector</q:value>
             </q:equal>
         </filter>
     </connectorRef>
 
     <connectorConfiguration>
-        <icfs:configurationProperties>
-            <sql:driverClass>org.mariadb.jdbc.Driver</sql:driverClass>
-            <sql:connectionString>jdbc:mariadb://db:3306/callcenter</sql:connectionString>
-            <sql:user>callcenter</sql:user>
-            <sql:password>CallCenter2024!</sql:password>
-        </icfs:configurationProperties>
+        <icfc:configurationProperties
+        xmlns:icscdbtable="http://midpoint.evolveum.com/xml/ns/public/connector/icf-1/bundle/com.evolveum.polygon.connector-databasetable/org.identityconnectors.databasetable.DatabaseTableConnector">
+            <icscdbtable:port>5432</icscdbtable:port>
+            <icscdbtable:host>db</icscdbtable:host>
+            <icscdbtable:user>callcenter</icscdbtable:user>
+            <icscdbtable:password><clearValue>CallCenter2024!</clearValue></icscdbtable:password>
+            <icscdbtable:database>callcenter</icscdbtable:database>
+            <icscdbtable:table>users</icscdbtable:table>
+            <icscdbtable:keyColumn>id</icscdbtable:keyColumn>
+            <icscdbtable:passwordColumn>password</icscdbtable:passwordColumn>
+            <icscdbtable:jdbcDriver>org.postgresql.Driver</icscdbtable:jdbcDriver>
+            <icscdbtable:jdbcUrlTemplate>jdbc:postgresql://%h:%p/%d</icscdbtable:jdbcUrlTemplate>
+            <icscdbtable:enableEmptyString>true</icscdbtable:enableEmptyString>
+            <icscdbtable:rethrowAllSQLExceptions>true</icscdbtable:rethrowAllSQLExceptions>
+            <icscdbtable:nativeTimestamps>false</icscdbtable:nativeTimestamps>
+            <icscdbtable:allNative>true</icscdbtable:allNative>
+        </icfc:configurationProperties>
     </connectorConfiguration>
-
-    <schema>
-        <definition>
-            <c:attribute>
-                <c:name>uid</c:name>
-                <c:ref>ri:uid</c:ref>
-                <c:displayName>ID</c:displayName>
-                <c:nativeAttributeName>id</c:nativeAttributeName>
-            </c:attribute>
-            <c:attribute>
-                <c:name>username</c:name>
-                <c:ref>ri:name</c:ref>
-                <c:displayName>Username</c:displayName>
-                <c:nativeAttributeName>username</c:nativeAttributeName>
-            </c:attribute>
-            <c:attribute>
-                <c:name>full_name</c:name>
-                <c:ref>ri:fullName</c:ref>
-                <c:displayName>Full Name</c:displayName>
-                <c:nativeAttributeName>full_name</c:nativeAttributeName>
-            </c:attribute>
-            <c:attribute>
-                <c:name>sip_extension</c:name>
-                <c:ref>ri:telephoneNumber</c:ref>
-                <c:displayName>SIP Extension</c:displayName>
-                <c:nativeAttributeName>sip_extension</c:nativeAttributeName>
-            </c:attribute>
-            <c:attribute>
-                <c:name>sip_password</c:name>
-                <c:ref>ri:password</c:ref>
-                <c:displayName>SIP Password</c:displayName>
-                <c:nativeAttributeName>sip_password</c:nativeAttributeName>
-            </c:attribute>
-            <c:attribute>
-                <c:name>role</c:name>
-                <c:ref>ri:role</c:ref>
-                <c:displayName>Role</c:displayName>
-                <c:nativeAttributeName>role</c:nativeAttributeName>
-                <c:enumeration>
-                    <c:value>AgenteCallCenter</c:value>
-                    <c:value>Supervisor</c:value>
-                    <c:value>Admin</c:value>
-                </c:enumeration>
-            </c:attribute>
-            <c:attribute>
-                <c:name>email</c:name>
-                <c:ref>ri:email</c:ref>
-                <c:displayName>Email</c:displayName>
-                <c:nativeAttributeName>email</c:nativeAttributeName>
-            </c:attribute>
-            <c:attribute>
-                <c:name>enabled</c:name>
-                <c:ref>ri:enabled</c:ref>
-                <c:displayName>Enabled</c:displayName>
-                <c:nativeAttributeName>enabled</c:nativeAttributeName>
-            </c:attribute>
-        </definition>
-    </schema>
 
     <schemaHandling>
         <objectType>
-            <ri:account>true</ri:account>
-            <ri:default>true</ri:default>
+            <displayName>Default Account</displayName>
+            <default>true</default>
+            <intent>agent</intent>
+            <objectClass>ri:AccountObjectClass</objectClass>
             <attribute>
-                <c:ref>ri:uid</c:ref>
-                <c:signDisplayOrder>1</c:signDisplayOrder>
-                <matchingRule>http://midpoint.evolveum.com/xml/ns/public/matching-rule-3#integer</matchingRule>
-                <displayName>ID</displayName>
+                <ref>icfs:uid</ref>
+                <displayName>User ID</displayName>
+                <limitations>
+                    <access>
+                        <read>true</read>
+                    </access>
+                </limitations>
             </attribute>
             <attribute>
-                <c:ref>ri:name</c:ref>
-                <c:signDisplayOrder>2</c:signDisplayOrder>
-                <matchingRule>http://midpoint.evolveum.com/xml/ns/public/matching-rule-3#stringIgnoreCase</matchingRule>
-                <displayName>Username</displayName>
+                <ref>icfs:name</ref>
+                <displayName>Name</displayName>
+                <limitations>
+                    <minOccurs>0</minOccurs>
+                    <access>
+                        <read>true</read>
+                        <add>true</add>
+                        <modify>true</modify>
+                    </access>
+                </limitations>
+                <outbound>
+                    <source>
+                        <path>$user/name</path>
+                    </source>
+                </outbound>
+                <inbound>
+                    <target>
+                        <path>$user/name</path>
+                    </target>
+                </inbound>
             </attribute>
             <attribute>
-                <c:ref>ri:telephoneNumber</c:ref>
-                <c:signDisplayOrder>3</c:signDisplayOrder>
+                <ref>ri:sip_extension</ref>
                 <displayName>SIP Extension</displayName>
+                <outbound>
+                    <source>
+                        <path>$user/telephoneNumber</path>
+                    </source>
+                </outbound>
+                <inbound>
+                    <target>
+                        <path>$user/telephoneNumber</path>
+                    </target>
+                </inbound>
             </attribute>
             <attribute>
-                <c:ref>ri:role</c:ref>
-                <c:signDisplayOrder>4</c:signDisplayOrder>
+                <ref>ri:role</ref>
                 <displayName>Role</displayName>
+                <outbound>
+                    <source>
+                        <path>$user/role</path>
+                    </source>
+                </outbound>
+                <inbound>
+                    <target>
+                        <path>$user/role</path>
+                    </target>
+                </inbound>
             </attribute>
             <attribute>
-                <c:ref>ri:enabled</c:ref>
-                <c:signDisplayOrder>5</c:signDisplayOrder>
-                <displayName>Enabled</displayName>
+                <ref>ri:email</ref>
+                <displayName>Email</displayName>
+                <outbound>
+                    <source>
+                        <path>$user/emailAddress</path>
+                    </source>
+                </outbound>
+                <inbound>
+                    <target>
+                        <path>$user/emailAddress</path>
+                    </target>
+                </inbound>
             </attribute>
+            <attribute>
+                <ref>ri:full_name</ref>
+                <displayName>Full Name</displayName>
+                <outbound>
+                    <source>
+                        <path>$user/fullName</path>
+                    </source>
+                </outbound>
+                <inbound>
+                    <target>
+                        <path>$user/fullName</path>
+                    </target>
+                </inbound>
+            </attribute>
+            <activation>
+                <administrativeStatus>
+                    <outbound/>
+                </administrativeStatus>
+            </activation>
+            <credentials>
+                <password>
+                    <outbound/>
+                </password>
+            </credentials>
         </objectType>
     </schemaHandling>
 
-    <synchronization>
-        <enabled>true</enabled>
-        <reconciliation>
-            <processing>addAttributeValues</processing>
-        </reconciliation>
-        <correlation>
-            <correlators>
-                <items>
-                    <item>
-                        <path>ri:name</path>
-                    </item>
-                </items>
-            </correlators>
-        </correlation>
-        <reactions>
-            <reaction>
-                <situation>linked</situation>
-                <processing>fullSynchronization</processing>
-                <actions>
-                    <executeScript>
-                        <script>
-                            <code>
-                                log.info("Provisioning SIP extension for user: " + username)
-                                log.info("Extension: " + telephoneNumber + ", Role: " + role)
-
-                                // Only provision if role is AgenteCallCenter and extension exists
-                                if ("AgenteCallCenter".equals(role) && telephoneNumber != null) {
-                                    def scriptPath = "/opt/midpoint/scripts/provision-asterisk.py"
-                                    def args = [String.valueOf(id), name, telephoneNumber, password, fullName]
-
-                                    log.info("Running: " + scriptPath + " " + args.join(" "))
-                                    def proc = Runtime.getRuntime().exec(["python3", scriptPath] + args)
-                                    def stdout = new BufferedReader(new InputStreamReader(proc.getInputStream()))
-                                    def stderr = new BufferedReader(new InputStreamReader(proc.getErrorStream()))
-
-                                    String line
-                                    while ((line = stdout.readLine()) != null) { log.info(line) }
-                                    while ((line = stderr.readLine()) != null) { log.warn(line) }
-
-                                    def exitCode = proc.waitFor()
-                                    log.info("Provision script exited with code: " + exitCode)
-                                } else {
-                                    log.info("User " + name + " not an AgenteCallCenter, skipping")
-                                }
-                            </code>
-                        </script>
-                    </executeScript>
-                </actions>
-            </reaction>
-            <reaction>
-                <situation>unlinked</situation>
-                <processing>fullSynchronization</processing>
-                <actions>
-                    <executeScript>
-                        <script>
-                            <code>
-                                log.info("Deprovisioning SIP extension: " + telephoneNumber)
-                                if (telephoneNumber != null) {
-                                    def scriptPath = "/opt/midpoint/scripts/deprovision-asterisk.py"
-                                    def proc = Runtime.getRuntime().exec(["python3", scriptPath, String.valueOf(telephoneNumber)])
-                                    def stdout = new BufferedReader(new InputStreamReader(proc.getInputStream()))
-                                    def stderr = new BufferedReader(new InputStreamReader(proc.getErrorStream()))
-
-                                    String line
-                                    while ((line = stdout.readLine()) != null) { log.info(line) }
-                                    while ((line = stderr.readLine()) != null) { log.warn(line) }
-
-                                    def exitCode = proc.waitFor()
-                                    log.info("Deprovision script exited with code: " + exitCode)
-                                }
-                            </code>
-                        </script>
-                    </executeScript>
-                </actions>
-            </reaction>
-        </reactions>
-    </synchronization>
-
-    <connectorScript>
-        <searchScript>
-            <code>
-                // Search all active users from the callcenter DB
-                SELECT id AS uid, username, full_name, sip_extension, sip_password, role, email, enabled
-                FROM users
-                WHERE enabled = 1
-            </code>
-        </searchScript>
-        <readScript>
-            <code>
-                // Read a single user by ID
-                SELECT id AS uid, username, full_name, sip_extension, sip_password, role, email, enabled
-                FROM users WHERE id = ${uid}
-            </code>
-        </readScript>
-        <createScript>
-            <code>
-                // Create a new user (provisioned by midPoint)
-                INSERT INTO users (username, full_name, email, role, sip_extension, sip_password, enabled)
-                VALUES ('${username}', '${fullName}', '${email}', '${role}', '${telephoneNumber}', '${password}', ${enabled})
-            </code>
-        </createScript>
-        <updateScript>
-            <code>
-                // Update an existing user
-                UPDATE users
-                SET full_name = '${fullName}',
-                    email = '${email}',
-                    role = '${role}',
-                    sip_extension = '${telephoneNumber}',
-                    sip_password = '${password}',
-                    enabled = ${enabled}
-                WHERE id = ${uid}
-            </code>
-        </updateScript>
-        <deleteScript>
-            <code>
-                // Soft-delete: disable the user
-                UPDATE users SET enabled = 0 WHERE id = ${uid}
-            </code>
-        </deleteScript>
-    </connectorScript>
 </resource>
