@@ -10,8 +10,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-callcenter}
     volumes:
       - db-data:/var/lib/postgresql/data
-      - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
-      - ./db/init-midpoint.sql:/docker-entrypoint-initdb.d/002-midpoint-schema.sql:ro
+      - ./backend/cdr/db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+      - ./backend/cdr/db/init-midpoint.sql:/docker-entrypoint-initdb.d/002-midpoint-schema.sql:ro
     networks:
       - callcenter-net
     healthcheck:
@@ -22,14 +22,13 @@ services:
 
   midpoint:
     build:
-      context: ./midpoint
+      context: ./backend/auth/midpoint
       dockerfile: Dockerfile
     container_name: callcenter-midpoint
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
-    command: ["/opt/midpoint/scripts/init-midpoint.sh"]
     environment:
       MP_INIT_DB: "true"
       MP_ADMIN_PASSWORD: ${MP_PASSWORD:-Chang3M3!}
@@ -42,7 +41,7 @@ services:
       MP_SET_midpoint_repository_upgradeableSchemaAction: stop
     volumes:
       - midpoint-data:/opt/midpoint/var
-      - ./midpoint/config/config.xml:/opt/midpoint/var/config.xml
+      - ./backend/auth/midpoint/config/config.xml:/opt/midpoint/var/config.xml
     ports:
       - "8080:8080"
     networks:
@@ -56,7 +55,7 @@ services:
 
   asterisk:
     build:
-      context: ./asterisk
+      context: ./backend/asterisk/pbx
       dockerfile: Dockerfile
     container_name: callcenter-asterisk
     restart: unless-stopped
@@ -65,7 +64,7 @@ services:
         condition: service_healthy
     volumes:
       - asterisk-config:/etc/asterisk
-      - ./asterisk/scripts:/opt/asterisk/scripts:ro
+      - ./backend/asterisk/pbx/scripts:/opt/asterisk/scripts:ro
       - asterisk-log:/var/log/asterisk
       - asterisk-recordings:/var/spool/asterisk/monitor
     ports:
@@ -96,25 +95,124 @@ services:
       timeout: 5s
       retries: 5
 
-  recorder:
+  recorder-svc:
     build:
-      context: ./recorder
+      context: ./backend/recorder
       dockerfile: Dockerfile
-    container_name: callcenter-recorder
+    container_name: callcenter-recorder-svc
     restart: unless-stopped
     depends_on:
       minio:
         condition: service_healthy
       asterisk:
         condition: service_started
+    environment:
+      MINIO_HOST: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_BUCKET: recordings
     volumes:
       - asterisk-recordings:/recordings:ro
+    expose:
+      - "3005"
+    networks:
+      - callcenter-net
+
+  auth-svc:
+    build:
+      context: ./backend/auth
+      dockerfile: Dockerfile
+    container_name: callcenter-auth
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USERNAME: ${POSTGRES_USER:-callcenter}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-CallCenter2024!}
+      DB_NAME: ${POSTGRES_DB:-callcenter}
+      JWT_SECRET: ${JWT_SECRET:-callcenter-secret-key}
+      MIDPOINT_URL: http://midpoint:8080/midpoint
+      MP_ADMIN_USER: administrator
+      MP_ADMIN_PASSWORD: ${MP_PASSWORD:-Chang3M3!}
+      MP_INIT_DIR: /opt/midpoint/init
+    volumes:
+      - ./backend/auth/midpoint/config:/opt/midpoint/init:ro
+    expose:
+      - "3002"
+    networks:
+      - callcenter-net
+
+  cdr-svc:
+    build:
+      context: ./backend/cdr
+      dockerfile: Dockerfile
+    container_name: callcenter-cdr
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USERNAME: ${POSTGRES_USER:-callcenter}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-CallCenter2024!}
+      DB_NAME: ${POSTGRES_DB:-callcenter}
+    expose:
+      - "3003"
+    networks:
+      - callcenter-net
+
+  asterisk-svc:
+    build:
+      context: ./backend/asterisk
+      dockerfile: Dockerfile
+    container_name: callcenter-asterisk-svc
+    restart: unless-stopped
+    depends_on:
+      asterisk:
+        condition: service_started
+    environment:
+      ASTERISK_SSH_HOST: asterisk
+      ASTERISK_SSH_PORT: "22"
+      ASTERISK_SSH_USER: provision
+      ASTERISK_SSH_KEY: /ssh/provision-key
+    volumes:
+      - ./backend/asterisk/pbx/ssh/provision-key:/ssh/provision-key:ro
+    expose:
+      - "3004"
+    networks:
+      - callcenter-net
+
+  api-gateway:
+    build:
+      context: ./backend/gateway
+      dockerfile: Dockerfile
+    container_name: callcenter-gateway
+    restart: unless-stopped
+    depends_on:
+      auth-svc:
+        condition: service_started
+      cdr-svc:
+        condition: service_started
+      asterisk-svc:
+        condition: service_started
+    environment:
+      AUTH_HOST: auth-svc
+      CDR_HOST: cdr-svc
+      ASTERISK_HOST: asterisk-svc
+      JWT_SECRET: ${JWT_SECRET:-callcenter-secret-key}
+    ports:
+      - "3001:3001"
     networks:
       - callcenter-net
 
   frontend:
     build:
-      context: ./frontend
+      context: ./backend/gateway/frontend
       dockerfile: Dockerfile
     container_name: callcenter-frontend
     restart: unless-stopped

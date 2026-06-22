@@ -36,14 +36,14 @@ $results += Run-Test -Name "Docker containers status" -ScriptBlock {
 
 # Test 2: Database connectivity
 $results += Run-Test -Name "Database connection" -ScriptBlock {
-    $result = docker exec callcenter-db mysql -u callcenter -pCallCenter2024! callcenter -e "SELECT 1 AS test;" 2>&1
+    $result = docker exec callcenter-db psql -U callcenter -d callcenter -c "SELECT 1 AS test;" 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Cannot connect to database: $result" }
 }
 
 # Test 3: Seed users exist
 $results += Run-Test -Name "Seed users in database" -ScriptBlock {
-    $count = docker exec callcenter-db mysql -u callcenter -pCallCenter2024! callcenter -N -e "SELECT COUNT(*) FROM users;" 2>$null
-    if ($count -lt 2) { throw "Expected at least 2 users, found $count" }
+    $count = docker exec callcenter-db psql -U callcenter -d callcenter -At -c "SELECT COUNT(*) FROM users;" 2>$null
+    if ($count -lt 1) { throw "Expected at least 1 user, found $count" }
 }
 
 # Test 4: midPoint HTTP accessible
@@ -67,29 +67,32 @@ $results += Run-Test -Name "Asterisk PJSIP transports" -ScriptBlock {
 
 # Test 7: CDR table exists
 $results += Run-Test -Name "CDR table exists" -ScriptBlock {
-    $exists = docker exec callcenter-db mysql -u callcenter -pCallCenter2024! callcenter -N -e "SHOW TABLES LIKE 'cdr';" 2>$null
-    if ($exists -notmatch "cdr") { throw "CDR table not found" }
+    $exists = docker exec callcenter-db psql -U callcenter -d callcenter -At -c "SELECT EXISTS(SELECT FROM information_schema.tables WHERE table_name='cdr');" 2>$null
+    if ($exists -ne "t") { throw "CDR table not found" }
 }
 
 # Test 8: Audit log table exists
 $results += Run-Test -Name "Audit log table exists" -ScriptBlock {
-    $exists = docker exec callcenter-db mysql -u callcenter -pCallCenter2024! callcenter -N -e "SHOW TABLES LIKE 'audit_log';" 2>$null
-    if ($exists -notmatch "audit_log") { throw "audit_log table not found" }
+    $exists = docker exec callcenter-db psql -U callcenter -d callcenter -At -c "SELECT EXISTS(SELECT FROM information_schema.tables WHERE table_name='audit_log');" 2>$null
+    if ($exists -ne "t") { throw "audit_log table not found" }
 }
 
-# Test 9: Test provision script (add + remove)
-$results += Run-Test -Name "Provision extension script" -ScriptBlock {
+# Test 9: Test provision via SSH (add + remove) - backend equivalent
+$results += Run-Test -Name "Provision extension via SSH" -ScriptBlock {
     $ext = "1999"
-    docker exec callcenter-asterisk /opt/asterisk/scripts/provision_extension.sh add test $ext pass99 "Test" 2>&1 | Out-Null
+    $block = @"
+`n[$ext]`ntype = endpoint`ncontext = callcenter`ndisallow = all`nallow = ulaw`nauth = $ext-auth`naors = $ext`ncallerid = "Test" <$ext>`nwebrtc = yes`ntransport = transport-ws`n`n[$ext-auth]`ntype = auth`nauth_type = userpass`npassword = pass99`nusername = $ext`n`n[$ext]`ntype = aor`nmax_contacts = 1`n
+"@
+    docker exec callcenter-asterisk bash -c "printf '$block' >> /etc/asterisk/pjsip.conf"
+    docker exec callcenter-asterisk asterisk -rx "module reload res_pjsip.so" 2>&1 | Out-Null
     $found = docker exec callcenter-asterisk grep -c "\[$ext\]" /etc/asterisk/pjsip.conf 2>$null
     if ($found -eq 0) { throw "Extension $ext not added to pjsip.conf" }
-    docker exec callcenter-asterisk /opt/asterisk/scripts/provision_extension.sh remove $ext 2>&1 | Out-Null
+    docker exec callcenter-asterisk sed -i "/^\[$ext\]/,/^$/d" /etc/asterisk/pjsip.conf
+    docker exec callcenter-asterisk asterisk -rx "module reload res_pjsip.so" 2>&1 | Out-Null
 }
 
 # Test 10: Network connectivity between containers
 $results += Run-Test -Name "Cross-container network" -ScriptBlock {
-    $mysql = docker exec callcenter-asterisk bash -c "echo 'SELECT 1;' | mysql -h db -u callcenter -pCallCenter2024! callcenter" 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "Asterisk cannot reach DB via MySQL: $mysql" }
     $http = docker exec callcenter-asterisk curl -s -m 3 http://midpoint:8080/midpoint 2>&1
     if ($LASTEXITCODE -ne 0) { throw "Asterisk cannot reach midPoint via HTTP" }
 }

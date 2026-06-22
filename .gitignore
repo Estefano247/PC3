@@ -32,5 +32,12 @@ tmp/
 *.key
 
 # Build context copies of SSH keys
-midpoint/ssh/
-asterisk/ssh/
+**/ssh/
+**/provision-key
+**/provision-key.pub
+
+# Node / Build artifacts
+node_modules/
+backend/*/node_modules/
+backend/*/dist/
+backend/*/dist/**/*

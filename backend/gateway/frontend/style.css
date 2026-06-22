@@ -1,0 +1,482 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.container {
+    width: 400px;
+    background: #1e293b;
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+    overflow: hidden;
+}
+
+.header {
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    padding: 24px;
+    text-align: center;
+}
+
+.header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.header p {
+    font-size: 13px;
+    opacity: 0.85;
+}
+
+.status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 24px;
+    background: #0f172a;
+    border-bottom: 1px solid #334155;
+    font-size: 13px;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #ef4444;
+    transition: background 0.3s;
+}
+
+.status-dot.connected {
+    background: #22c55e;
+}
+
+.status-dot.registered {
+    background: #22c55e;
+    box-shadow: 0 0 8px #22c55e;
+}
+
+#extension-display {
+    font-weight: 600;
+    color: #3b82f6;
+}
+
+.login-form, .call-section {
+    padding: 24px;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+    margin-bottom: 6px;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 10px 12px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.form-group input:focus {
+    border-color: #3b82f6;
+}
+
+.btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+}
+
+.btn-danger {
+    background: #ef4444;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+}
+
+.btn-success {
+    background: #22c55e;
+    color: white;
+}
+
+.btn-success:hover {
+    background: #16a34a;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.dialpad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.dial-btn {
+    padding: 16px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 20px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.dial-btn:hover {
+    background: #1e293b;
+    border-color: #3b82f6;
+}
+
+.dial-btn:active {
+    transform: scale(0.95);
+}
+
+.call-input {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.call-input input {
+    flex: 1;
+    padding: 10px 12px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #e2e8f0;
+    font-size: 18px;
+    text-align: center;
+    outline: none;
+    letter-spacing: 4px;
+}
+
+.call-input input:focus {
+    border-color: #3b82f6;
+}
+
+.call-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.call-actions .btn {
+    flex: 1;
+}
+
+.call-log {
+    border-top: 1px solid #334155;
+    padding: 16px 24px;
+}
+
+.call-log h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    margin-bottom: 8px;
+}
+
+.log-entries {
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+.log-entry {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 13px;
+    border-bottom: 1px solid #1e293b;
+}
+
+.log-entry .time {
+    color: #64748b;
+}
+
+.log-entry .direction {
+    font-weight: 500;
+}
+
+.log-entry .direction.incoming {
+    color: #22c55e;
+}
+
+.log-entry .direction.outgoing {
+    color: #3b82f6;
+}
+
+.log-entry .status {
+    color: #94a3b8;
+}
+
+.audio-controls {
+    display: none;
+}
+
+/* Tabs */
+.tabs {
+    display: flex;
+    border-bottom: 1px solid #334155;
+    background: #0f172a;
+}
+
+.tab {
+    flex: 1;
+    padding: 12px;
+    background: transparent;
+    border: none;
+    color: #64748b;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-bottom: 2px solid transparent;
+}
+
+.tab:hover {
+    color: #e2e8f0;
+    background: #1e293b;
+}
+
+.tab.active {
+    color: #3b82f6;
+    border-bottom-color: #3b82f6;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Recordings */
+.recordings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid #334155;
+}
+
+.recordings-header h3 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+}
+
+.recordings-list {
+    padding: 16px 24px;
+    max-height: 350px;
+    overflow-y: auto;
+}
+
+.recording-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #1e293b;
+}
+
+.recording-item:last-child {
+    border-bottom: none;
+}
+
+.recording-info {
+    flex: 1;
+}
+
+.recording-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #e2e8f0;
+    word-break: break-all;
+}
+
+.recording-meta {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 2px;
+}
+
+.recording-play {
+    padding: 6px 14px;
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+    text-decoration: none;
+    margin-left: 8px;
+    white-space: nowrap;
+}
+
+.recording-play:hover {
+    background: #2563eb;
+}
+
+.recording-play.download {
+    background: #22c55e;
+}
+
+.recording-play.download:hover {
+    background: #16a34a;
+}
+
+.loading {
+    text-align: center;
+    color: #64748b;
+    padding: 24px;
+    font-size: 13px;
+}
+
+.empty-state {
+    text-align: center;
+    color: #64748b;
+    padding: 32px 24px;
+    font-size: 13px;
+}
+
+.empty-state p {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #475569;
+}
+
+/* Incoming call notification */
+.incoming-call {
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: slideIn 0.3s ease-out;
+}
+
+.incoming-call-content {
+    background: #1e293b;
+    border: 1px solid #3b82f6;
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+    width: 100%;
+}
+
+.incoming-call-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+}
+
+.incoming-call-content p {
+    font-size: 14px;
+    margin-bottom: 16px;
+    color: #e2e8f0;
+}
+
+.incoming-call-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.incoming-call-actions .btn {
+    flex: 1;
+    padding: 10px;
+    font-size: 13px;
+}
+
+@keyframes slideIn {
+    from { transform: translateY(-100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+/* Audio player */
+audio {
+    width: 100%;
+    margin-top: 8px;
+    border-radius: 8px;
+}
+
+.btn-secondary {
+    background: #475569;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #334155;
+}
+
+.error-message {
+    color: #ef4444;
+    font-size: 13px;
+    margin-top: 8px;
+    text-align: center;
+}
+
+.login-form h3 {
+    font-size: 14px;
+    color: #94a3b8;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.hidden {
+    display: none;
+}

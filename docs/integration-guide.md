@@ -1,127 +1,132 @@
-# Guía de Integración: midPoint → Asterisk
+# Guia de Integracion: Backend NestJS + midPoint + Asterisk
 
-## Arquitectura de Integración
+## Arquitectura de Integracion
 
 ```
-┌──────────────────┐   DatabaseTable    ┌──────────────┐
-│   PostgreSQL 15   │◄─────────────────►│   midPoint    │
-│  (callcenter DB)  │   Connector       │  (IAM Core)   │
-│    - users        │   (Live Sync)     │               │
-│    - cdr          │                   │  - Object     │
-│    - audit_log    │                   │    Template   │
-└──────────────────┘                   │    (Mappings) │
-                                        │  - Role       │
-                                        │    Inducement │
-                                        └──────┬───────┘
-                                               │
-                                     Groovy Mappings
-                                     (generan sip_extension
-                                      y sip_password)
-                                               │
-                                     (escribe en users.sip_extension
-                                      y users.sip_password)
-                                               │
-                                     ┌────────▼────────┐
-                                     │   PostgreSQL     │
-                                     │  extconfig.conf  │
-                                     │  consulta users  │
-                                     └────────┬────────┘
-                                               │
-                                     ┌────────▼────────┐
-                                     │   Asterisk       │
-                                     │  (PBX / PJSIP)   │
-                                     │  extconfig.conf  │
-                                     └──────────────────┘
++------------------+   DatabaseTable    +--------------+
+|   PostgreSQL 15   |<----------------->|   midPoint    |
+|  (callcenter DB)  |   Connector       |  (IAM Core)   |
+|    - users        |   (Live Sync)     |               |
+|    - cdr          |                   |  - Object     |
+|    - audit_log    |                   |    Template   |
++---------+--------+                   |    (Mappings) |
+          |                            |  - Role       |
+          |                            |    Inducement |
+          |                            +-------+-------+
+          |                                    | REST API
+          |                                    | (Basic Auth)
+          |   +--------------------------------+------------------+
+          |   |        Backend NestJS         |                  |
+          |   |                               v                  |
+          |   |  +---------+   +----------+  +----------+       |
+          |   |  | Gateway |-->| Auth     |  | Recorder |       |
+          |   |  | :3001   |   | :3002    |  | :3005    |       |
+          +---+--+ (HTTP)  |   | (TCP) c  |  | (TCP)    |       |
+          |   |  |         |   +-------+--+  +-----+----+       |
+          |   |  |         |   +----------+        |            |
+          |   |  |         |-->| Cdr :3003 |        | fPutObject|
+          |   |  |         |   | (TCP)    |        |            |
+          |   |  |         |   +----------+        v            |
+          |   |  |         |   +----------+  +--------+         |
+          |   |  |         |-->|Asterisk  |  | MinIO  |         |
+          |   |  +---------+   |Svc :3004 |->| :9000  |         |
+          |   |                | (TCP)    |  +--------+         |
+          |   |                +----+-----+                     |
+          |   |                     | SSH                       |
+          |   +---------------------+---------------------------+
+          |                         |
+          |                 +-------v--------+
+          |                 |   Asterisk     |
+          |                 |  (PBX / PJSIP) |
+          |                 |  pjsip.conf    |
+          |                 +----------------+
+          +------------------------------------+
 ```
 
 ## Flujo de Aprovisionamiento
 
-1. **Usuario nuevo** se crea en midPoint UI con rol `AgenteCallCenter`
-2. **midPoint** ejecuta Live Sync cada N segundos consultando la tabla `users` de PostgreSQL vía DatabaseTableConnector
-3. **Correlación**: midPoint correlaciona el usuario por `username` en su repositorio interno
-4. **Object Template**: midPoint aplica el object template con mappings Groovy que:
-   - Generan `sip_extension` automáticamente (desde el username, empezando en 1100)
-   - Generan `sip_password` aleatorio
-   - Mapean `role` del usuario al recurso
-5. **Escritura en BD**: Los mappings escriben `sip_extension` y `sip_password` en la tabla `users` de PostgreSQL
-6. **Asterisk lee configuración**: Via `extconfig.conf`, Asterisk consulta `users` en PostgreSQL directamente (no requiere recarga)
-7. **Softphone**: El agente configura su softphone con extensión y contraseña → se registra
+### Gestion de identidad (midPoint -> BD)
 
-> **Nota:** A diferencia de versiones anteriores, ya no se usa ARI ni ScriptedSQL. midPoint escribe directamente en la BD y Asterisk lee desde `extconfig.conf` con consultas SQL en tiempo real. El script `provision-asterisk.py` solo se usa para operaciones vía SSH cuando es necesario forzar una recarga.
+1. **Usuario nuevo** se crea en midPoint UI con rol `AgenteCallCenter`
+2. **midPoint** ejecuta Live Sync consultando la tabla `users` de PostgreSQL via DatabaseTableConnector
+3. **Correlacion**: midPoint correlaciona el usuario por `username`
+4. **Object Template**: midPoint aplica mappings Groovy que generan `sip_extension` y `sip_password`
+5. **Escritura en BD**: Los mappings escriben `sip_extension` y `sip_password` en la tabla `users`
+
+### Gestion de extensiones (Backend API -> SSH -> Asterisk)
+
+1. **Cliente HTTP** llama a `POST /api/auth/login` -> gateway -> auth-svc -> devuelve JWT
+2. **Cliente HTTP** llama a `GET/POST/DELETE /api/asterisk/extensions` -> gateway -> asterisk-svc
+3. **asterisk-svc** se conecta por SSH al contenedor `asterisk` como usuario `provision` usando la clave privada (`backend/asterisk/pbx/ssh/provision-key`)
+4. Ejecuta comandos directos sobre `/etc/asterisk/pjsip.conf`: `cat`, `grep`, `sed`, `printf`
+5. Recarga `res_pjsip` con `sudo /usr/sbin/asterisk -rx "module reload res_pjsip.so"`
+6. **Softphone**: El agente se registra con extension y contrasena
+
+> **Nota:** Los comandos `asterisk -rx` se ejecutan con `sudo /usr/sbin/asterisk` porque el socketctl (`/var/run/asterisk/asterisk.ctl`) es propiedad de root, y el usuario `provision` tiene sudo NOPASSWD configurado. El comando `core show status` no existe en Asterisk 20; se usa `core show uptime`, `core show version` y `core show calls` combinados.
 
 ## Recursos de midPoint Creados
 
-| Recurso | OID | Archivo | Propósito |
+| Recurso | OID | Archivo | Proposito |
 |---------|-----|---------|-----------|
-| CallCenter DB | `c0ffee01-c0ff-ee01-c0ff-ee01c0ffee01` | `resource-scripted-sql.xml` | Conector a PostgreSQL vía DatabaseTableConnector (tabla `users`) |
-| Rol AgenteCallCenter | `a1b2c3d4-e5f6-7890-abcd-ef1234567890` | `role-agentecallcenter.xml` | Rol con inducción para aprovisionar SIP |
-| Object Template | `b2c3d4e5-f6a7-8901-bcde-f12345678901` | `object-template-user.xml` | Mappings Groovy para generación de extensión y password |
+| CallCenter DB | `c0ffee01-c0ff-ee01-c0ff-ee01c0ffee01` | `backend/auth/midpoint/config/resource-scripted-sql.xml` | Conector a PostgreSQL via DatabaseTableConnector (tabla `users`) |
+| Rol AgenteCallCenter | `a1b2c3d4-e5f6-7890-abcd-ef1234567890` | `backend/auth/midpoint/config/role-agentecallcenter.xml` | Rol con induccion para aprovisionar SIP |
+| Object Template | `b2c3d4e5-f6a7-8901-bcde-f12345678901` | `backend/auth/midpoint/config/object-template-user.xml` | Mappings Groovy para generacion de extension y password |
 
-## Configuración de Sync en midPoint
+## Configuracion de Sync en midPoint
 
-1. **Los recursos se importan automáticamente** en el primer arranque via `init-midpoint.sh`:
-   ```bash
-   # Entrypoint personalizado que:
-   # 1. Inicia midPoint en background
-   # 2. Espera healthcheck OK (/actuator/health)
-   # 3. Ejecuta import-all.sh:
-   curl -u administrator:5ecr3t -X POST \
-     -H "Content-Type: application/xml" \
-     -d @/opt/midpoint/init/resource-scripted-sql.xml \
-     http://localhost:8080/midpoint/ws/rest/resources
+1. **Los recursos se importan automaticamente** en el primer arranque por `auth-svc` (NestJS `OnApplicationBootstrap`):
+   - auth-svc espera a que midPoint este saludable (healthcheck `/actuator/health`)
+   - POSTea los 3 XMLs via REST API:
+     - `POST /ws/rest/resources` -> resource-scripted-sql.xml
+     - `POST /ws/rest/roles` -> role-agentecallcenter.xml
+     - `POST /ws/rest/objectTemplates` -> object-template-user.xml
+   - HTTP 409 (conflicto) se trata como exito (config ya existe)
+   - Ejecucion fire-and-forget (no bloquea inicio del servicio)
 
-   curl -u administrator:5ecr3t -X POST \
-     -H "Content-Type: application/xml" \
-     -d @/opt/midpoint/init/role-agentecallcenter.xml \
-     http://localhost:8080/midpoint/ws/rest/roles
-
-   curl -u administrator:5ecr3t -X POST \
-     -H "Content-Type: application/xml" \
-     -d @/opt/midpoint/init/object-template-user.xml \
-     http://localhost:8080/midpoint/ws/rest/objectTemplates
-   ```
-
-2. **Verificar sincronización** en midPoint UI:
-   - Resource → CallCenter DB → Synchronization → Status
-   - Users → Buscar usuario sincronizado
+2. **Verificar sincronizacion** en midPoint UI:
+   - Resource -> CallCenter DB -> Synchronization -> Status
+   - Users -> Buscar usuario sincronizado
    - Los usuarios con rol `AgenteCallCenter` deben tener `sip_extension` y `sip_password` poblados
 
 ## Pruebas Unitarias
 
 Ver `tests/unit/test-mappings.groovy` - Pruebas Groovy para:
-- Generación de extensión automática
-- Validación de roles
-- Formato de extensiones (4 dígitos)
-- Política de contraseñas (min 8 chars)
-- Formato de auditoría
+- Generacion de extension automatica
+- Validacion de roles
+- Formato de extensiones (4 digitos)
+- Politica de contrasenas (min 8 chars)
+- Formato de auditoria
 
-## Pruebas de Integración
+## Pruebas de Integracion
 
 ```bash
-# Prueba rápida del script de provision
-./midpoint/scripts/test-provision.sh
-
-# Suite completa de integración (PowerShell)
+# Suite completa de integracion (PowerShell)
 pwsh tests/run-all-tests.ps1
 
-# Test de flujo completo (crear usuario → ver extensión)
+# Test de flujo completo (crear usuario -> ver extension)
 pwsh tests/integration/test-provisioning-flow.ps1
 
 # Verificar CDRs
 pwsh tests/integration/test-cdr-verification.ps1
 
-# Generar reporte de auditoría
+# Generar reporte de auditoria
 pwsh tests/integration/test-audit-security.ps1
 ```
 
-## Resolución de Problemas
+## Resolucion de Problemas
 
-| Síntoma | Causa | Solución |
+| Sintoma | Causa | Solucion |
 |---------|-------|----------|
-| midPoint no ve nuevos usuarios | Live Sync no activado | Verificar recurso → Sync → Enable |
-| No se genera extensión SIP | Mappings del object template no aplican | Verificar que el rol `AgenteCallCenter` esté asignado |
+| midPoint no ve nuevos usuarios | Live Sync no activado | Verificar recurso -> Sync -> Enable |
+| No se genera extension SIP | Mappings del object template no aplican | Verificar que el rol `AgenteCallCenter` este asignado |
 | midPoint no arranca | PostgreSQL no ready | Esperar 2-3 min, verificar `docker compose logs db` |
-| Extension duplicada | Conflictos en tabla `users` | Verificar `sip_extension` único en BD |
+| Extension duplicada | Conflictos en tabla `users` | Verificar `sip_extension` unico en BD |
 | Softphone no registra | Puerto no expuesto | Verificar `docker compose ps` puerto 5060/8088 |
-| CDR vacío | `extconfig.conf` mal configurado | Verificar conexión a PostgreSQL desde Asterisk |
-| Fallo en import inicial | midPoint no responde aún | El script `init-midpoint.sh` reintenta hasta que el healthcheck OK |
+| CDR vacio | `extconfig.conf` mal configurado | Verificar conexion a PostgreSQL desde Asterisk |
+| Fallo en import inicial | midPoint no responde aun | auth-svc reintenta hasta que el healthcheck OK |
+| API devuelve 401 | Token JWT expirado o invalido | Renovar token via `POST /api/auth/login` |
+| asterisk-svc no conecta | Clave SSH incorrecta o permiso | Verificar `backend/asterisk/pbx/ssh/provision-key` y `authorized_keys` en el home de `provision` en Asterisk |
+| asterisk-svc 500: "command not found" | `asterisk` no está en PATH del usuario `provision` | Usar ruta completa `/usr/sbin/asterisk` |
+| asterisk-svc 500: "Unable to connect to remote asterisk" | Socketctl inaccesible por permisos | Usar `sudo /usr/sbin/asterisk` (configurado en sudoers) |
+| API devuelve 401 en endpoints protegidos | JwtStrategy no conecta con auth-svc ({ cmd: 'auth.validate' }) | Verificar que auth-svc contesta en TCP:3002 y que `validateToken()` acepta `{ userId }` |
+| Extension no aparece en API | pjsip.conf no reflejado | El servicio lee el archivo directamente; si midPoint escribio en DB, la extension existe pero no en pjsip.conf |

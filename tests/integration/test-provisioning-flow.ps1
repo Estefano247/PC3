@@ -61,10 +61,15 @@ if ($confCheck -gt 0) {
     Write-Host "  ✓ Extension $testExt found in pjsip.conf" -ForegroundColor Green
 } else {
     Write-Host "  ⚠ Extension $testExt NOT found in pjsip.conf" -ForegroundColor DarkYellow
-    Write-Host "    Attempting direct provisioning via script..." -ForegroundColor Yellow
-    docker exec callcenter-asterisk /opt/asterisk/scripts/provision_extension.sh add $testUser $testExt $testPass "Test Agent"
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "  ✓ Extension provisioned directly" -ForegroundColor Green
+    Write-Host "    Attempting direct provisioning via SSH (backend-equivalent)..." -ForegroundColor Yellow
+    $block = @"
+`n[$testExt]`ntype = endpoint`ncontext = callcenter`ndisallow = all`nallow = ulaw`nauth = $testExt-auth`naors = $testExt`ncallerid = "Test Agent" <$testExt>`nwebrtc = yes`ntransport = transport-ws`n`n[$testExt-auth]`ntype = auth`nauth_type = userpass`npassword = $testPass`nusername = $testExt`n`n[$testExt]`ntype = aor`nmax_contacts = 1`n
+"@
+    docker exec callcenter-asterisk bash -c "printf '$block' >> /etc/asterisk/pjsip.conf"
+    docker exec callcenter-asterisk asterisk -rx "module reload res_pjsip.so" 2>&1 | Out-Null
+    $confCheck = docker exec callcenter-asterisk grep -c "\[$testExt\]" /etc/asterisk/pjsip.conf 2>$null
+    if ($confCheck -gt 0) {
+        Write-Host "  ✓ Extension provisioned directly via SSH" -ForegroundColor Green
     } else {
         Write-Host "  ✗ Direct provisioning failed" -ForegroundColor Red
     }
