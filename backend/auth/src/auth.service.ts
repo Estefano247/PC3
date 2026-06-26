@@ -3,8 +3,10 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as http from 'http';
 import { User } from './user.entity';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -29,7 +31,16 @@ export class AuthService implements OnApplicationBootstrap {
   }
 
   async onApplicationBootstrap() {
-    this.importMidpointConfigs();
+    this.backgroundImport();
+  }
+
+  private async backgroundImport() {
+    try {
+      await this.importMidpointConfigs();
+      await this.importMidpointUsers();
+    } catch (err) {
+      this.logger.error(`midPoint import failed: ${err.message}`);
+    }
   }
 
   async login(dto: LoginDto) {
@@ -46,18 +57,21 @@ export class AuthService implements OnApplicationBootstrap {
 
     try {
       const basicAuth = Buffer.from(`${dto.username}:${dto.password}`).toString('base64');
-      const response = await fetch(`${this.midpointUrl}/ws/rest/users/self`, {
+      const { statusCode } = await this.httpRequest(`${this.midpointUrl}/ws/rest/users/self`, {
         headers: { Authorization: `Basic ${basicAuth}` },
       });
-      authenticated = response.ok;
+      authenticated = statusCode >= 200 && statusCode < 300;
       if (authenticated) {
         this.logger.log(`midPoint validated credentials for ${dto.username}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       this.logger.warn(`midPoint unreachable (${error.message}), falling back to local auth`);
     }
 
     if (!authenticated) {
+      if (!user.passwordHash) {
+        throw new UnauthorizedException('Credenciales inválidas');
+      }
       const passwordValid = await bcrypt.compare(dto.password, user.passwordHash);
       if (!passwordValid) {
         throw new UnauthorizedException('Credenciales inválidas');
@@ -72,13 +86,21 @@ export class AuthService implements OnApplicationBootstrap {
     if (existing) {
       throw new ConflictException('El usuario ya existe');
     }
+    const maxUser = await this.userRepository
+      .createQueryBuilder('user')
+      .select('MAX(user.sipExtension)', 'max')
+      .getRawOne();
+    const nextExt = String((parseInt(maxUser?.max || '1099', 10) + 1));
     const salt = await bcrypt.genSalt();
     const passwordHash = await bcrypt.hash(dto.password, salt);
+    const sipPassword = crypto.randomBytes(16).toString('hex');
     const user = this.userRepository.create({
       username: dto.username,
       fullName: dto.fullName,
       email: dto.email || null,
       passwordHash,
+      sipPassword,
+      sipExtension: nextExt,
     });
     await this.userRepository.save(user);
     return this.generateToken(user);
@@ -123,7 +145,17 @@ export class AuthService implements OnApplicationBootstrap {
       try {
         const content = fs.readFileSync(filePath, 'utf-8');
         const basicAuth = Buffer.from(`${this.adminUser}:${this.adminPass}`).toString('base64');
-        const res = await fetch(`${this.midpointUrl}/ws/rest/${cfg.type}`, {
+        const oidMatch = content.match(/oid="([^"]+)"/);
+        const oid = oidMatch ? oidMatch[1] : null;
+
+        if (oid) {
+          await this.httpRequest(`${this.midpointUrl}/ws/rest/${cfg.type}/${oid}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Basic ${basicAuth}` },
+          }).catch(() => {});
+        }
+
+        const { statusCode, body } = await this.httpRequest(`${this.midpointUrl}/ws/rest/${cfg.type}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/xml',
@@ -133,25 +165,108 @@ export class AuthService implements OnApplicationBootstrap {
           body: content,
         });
 
-        if (res.ok || res.status === 409) {
-          this.logger.log(`${cfg.label} imported${res.status === 409 ? ' (already exists)' : ''}`);
+        if (statusCode >= 200 && statusCode < 300) {
+          this.logger.log(`${cfg.label} imported`);
         } else {
-          const text = await res.text();
-          this.logger.error(`Failed to import ${cfg.label}: HTTP ${res.status} - ${text}`);
+          this.logger.error(`Failed to import ${cfg.label}: HTTP ${statusCode} - ${body}`);
         }
-      } catch (error) {
+      } catch (error: any) {
         this.logger.warn(`midPoint import ${cfg.file} skipped: ${error.message}`);
       }
     }
   }
 
+  private async importMidpointUsers() {
+    const basicAuth = Buffer.from(`${this.adminUser}:${this.adminPass}`).toString('base64');
+    const roleOid = '00000000-0000-0000-0000-000000000010';
+
+    const seedUsers = [
+      { name: 'admin1', fullName: 'Admin Uno', email: 'admin1@callcenter.local', password: 'sip3001pass', telephoneNumber: '3001' },
+      { name: 'admin2', fullName: 'Admin Dos', email: 'admin2@callcenter.local', password: 'sip3002pass', telephoneNumber: '3002' },
+      { name: 'agente1', fullName: 'Agente Uno', email: 'agente1@callcenter.local', password: 'sip3005pass', telephoneNumber: '3005' },
+      { name: 'agente2', fullName: 'Agente Dos', email: 'agente2@callcenter.local', password: 'sip3006pass', telephoneNumber: '3006' },
+    ];
+
+    const userXml = (u: typeof seedUsers[0]) => `<?xml version="1.0" encoding="UTF-8"?>
+<user xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <name>${u.name}</name>
+    <fullName>${u.fullName}</fullName>
+    <emailAddress>${u.email}</emailAddress>
+    <credentials>
+        <password>
+            <value>${u.password}</value>
+        </password>
+    </credentials>
+    <assignment>
+        <targetRef oid="${roleOid}" type="c:RoleType"/>
+    </assignment>
+    <telephoneNumber>${u.telephoneNumber}</telephoneNumber>
+</user>`;
+
+    for (const u of seedUsers) {
+      let attempts = 0;
+      while (attempts < 3) {
+        attempts++;
+        try {
+          const { statusCode, body } = await this.httpRequest(`${this.midpointUrl}/ws/rest/users`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/xml',
+              Accept: 'application/xml',
+              Authorization: `Basic ${basicAuth}`,
+            },
+            body: userXml(u),
+          });
+
+          if (statusCode >= 200 && statusCode < 300 || statusCode === 409) {
+            this.logger.log(`midPoint user ${u.name} created${statusCode === 409 ? ' (already exists)' : ''}`);
+            break;
+          }
+          if (statusCode === 500 || statusCode === 503) {
+            this.logger.warn(`midPoint user ${u.name} attempt ${attempts}/3 failed: HTTP ${statusCode}, retrying...`);
+            await this.delay(5000);
+            continue;
+          }
+          this.logger.warn(`Failed to create midPoint user ${u.name}: HTTP ${statusCode} - ${body}`);
+          break;
+        } catch (error: any) {
+          this.logger.warn(`midPoint user ${u.name} attempt ${attempts}/3 failed: ${error.message}${attempts < 3 ? ', retrying...' : ''}`);
+          if (attempts < 3) await this.delay(5000);
+        }
+      }
+    }
+  }
+
+  private httpRequest(url: string, options: { method?: string; headers?: Record<string, string>; body?: string } = {}): Promise<{ statusCode: number; body: string }> {
+    return new Promise((resolve, reject) => {
+      const parsedUrl = new URL(url);
+      const opts: http.RequestOptions = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port,
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: options.method || 'GET',
+        headers: options.headers || {},
+        timeout: 15000,
+      };
+      const req = http.request(opts, (res) => {
+        let data = '';
+        res.on('data', (chunk) => data += chunk);
+        res.on('end', () => resolve({ statusCode: res.statusCode || 0, body: data }));
+      });
+      req.on('error', reject);
+      req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')); });
+      if (options.body) req.write(options.body);
+      req.end();
+    });
+  }
+
   private async waitForMidpoint() {
-    for (let i = 1; i <= 60; i++) {
+    for (let i = 1; i <= 120; i++) {
       try {
-        const res = await fetch(`${this.midpointUrl}/actuator/health`, {
-          signal: AbortSignal.timeout(5000),
-        });
-        if (res.ok) return;
+        const { statusCode } = await this.httpRequest(this.midpointUrl);
+        if (statusCode === 200 || statusCode === 302) return;
       } catch {
         // not ready
       }
@@ -167,6 +282,7 @@ export class AuthService implements OnApplicationBootstrap {
     const payload = { username: user.username, sub: user.id, role: user.role };
     return {
       access_token: this.jwtService.sign(payload),
+      sip_password: user.sipPassword,
       user: {
         id: user.id,
         username: user.username,
@@ -174,6 +290,7 @@ export class AuthService implements OnApplicationBootstrap {
         email: user.email,
         role: user.role,
         sipExtension: user.sipExtension,
+        sipPassword: user.sipPassword,
         enabled: user.enabled,
       },
     };

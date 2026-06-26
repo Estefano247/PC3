@@ -21,7 +21,7 @@
 
                     def user = focus
                     def hasRole = user.getAssignment()
-                        .any { it.getTargetRef() != null && "AgenteCallCenter".equals(it.getTargetRef().getOid()) }
+                        .any { it.getTargetRef() != null && "00000000-0000-0000-0000-000000000010".equals(it.getTargetRef().getOid()) }
 
                     if (hasRole && user.getTelephoneNumber() == null) {
                         // Generate next available extension

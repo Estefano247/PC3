@@ -22,6 +22,7 @@
     "@nestjs/cli": "^10.0.0",
     "@nestjs/schematics": "^10.0.0",
     "@types/ssh2": "^1.11.0",
+    "@types/node": "^20.0.0",
     "rimraf": "^5.0.1",
     "ts-loader": "^9.4.3",
     "ts-node": "^10.9.1",

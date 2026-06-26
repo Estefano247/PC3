@@ -45,13 +45,11 @@
 
 ## Flujo de Aprovisionamiento
 
-### Gestion de identidad (midPoint -> BD)
+### Gestion de identidad (auth-svc import)
 
-1. **Usuario nuevo** se crea en midPoint UI con rol `AgenteCallCenter`
-2. **midPoint** ejecuta Live Sync consultando la tabla `users` de PostgreSQL via DatabaseTableConnector
-3. **Correlacion**: midPoint correlaciona el usuario por `username`
-4. **Object Template**: midPoint aplica mappings Groovy que generan `sip_extension` y `sip_password`
-5. **Escritura en BD**: Los mappings escriben `sip_extension` y `sip_password` en la tabla `users`
+1. **En el arranque**: `auth-svc` importa 4 usuarios seed (admin1, admin2, agente1, agente2) en midPoint via REST API, con rol `AgenteCallCenter` y datos `telephoneNumber`, `fullName`, `emailAddress`
+2. **Autenticacion**: Cuando un usuario inicia sesion, `auth-svc` valida contra midPoint (`GET /ws/rest/users/self` con Basic Auth) y cae en fallback a bcrypt local si midPoint no responde
+3. **Perfil**: El JWT contiene `username`, `role`, `sipExtension` y `sipPassword` para que el frontend se registre en Asterisk
 
 ### Gestion de extensiones (Backend API -> SSH -> Asterisk)
 
@@ -69,18 +67,18 @@
 | Recurso | OID | Archivo | Proposito |
 |---------|-----|---------|-----------|
 | CallCenter DB | `c0ffee01-c0ff-ee01-c0ff-ee01c0ffee01` | `backend/auth/midpoint/config/resource-scripted-sql.xml` | Conector a PostgreSQL via DatabaseTableConnector (tabla `users`) |
-| Rol AgenteCallCenter | `a1b2c3d4-e5f6-7890-abcd-ef1234567890` | `backend/auth/midpoint/config/role-agentecallcenter.xml` | Rol con induccion para aprovisionar SIP |
-| Object Template | `b2c3d4e5-f6a7-8901-bcde-f12345678901` | `backend/auth/midpoint/config/object-template-user.xml` | Mappings Groovy para generacion de extension y password |
+| Rol AgenteCallCenter | `00000000-0000-0000-0000-000000000010` | `backend/auth/midpoint/config/role-agentecallcenter.xml` | Rol con induccion para aprovisionar SIP |
+| Object Template | `00000000-0000-0000-0000-000000000020` | `backend/auth/midpoint/config/object-template-user.xml` | Mappings Groovy para generacion de extension y password |
 
 ## Configuracion de Sync en midPoint
 
-1. **Los recursos se importan automaticamente** en el primer arranque por `auth-svc` (NestJS `OnApplicationBootstrap`):
-   - auth-svc espera a que midPoint este saludable (healthcheck `/actuator/health`)
-   - POSTea los 3 XMLs via REST API:
-     - `POST /ws/rest/resources` -> resource-scripted-sql.xml
-     - `POST /ws/rest/roles` -> role-agentecallcenter.xml
-     - `POST /ws/rest/objectTemplates` -> object-template-user.xml
-   - HTTP 409 (conflicto) se trata como exito (config ya existe)
+1. **Los recursos se importan automaticamente** en el primer arranque por `auth-svc` (background tras `onApplicationBootstrap`):
+   - auth-svc espera a que midPoint este saludable (GET sobre `/midpoint` cada 5s, max 120 intentos)
+   - Elimina configs existentes (DELETE por OID) y las recrea (POST):
+     - `DELETE /ws/rest/resources/{oid}` + `POST /ws/rest/resources` -> resource-scripted-sql.xml
+     - `DELETE /ws/rest/roles/{oid}` + `POST /ws/rest/roles` -> role-agentecallcenter.xml
+     - `DELETE /ws/rest/objectTemplates/{oid}` + `POST /ws/rest/objectTemplates` -> object-template-user.xml
+   - Tambien importa 4 usuarios seed via `POST /ws/rest/users`
    - Ejecucion fire-and-forget (no bloquea inicio del servicio)
 
 2. **Verificar sincronizacion** en midPoint UI:

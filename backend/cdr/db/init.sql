@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(50) NOT NULL DEFAULT 'AgenteCallCenter',
     sip_extension VARCHAR(10) UNIQUE,
     sip_password VARCHAR(64),
+    password_hash VARCHAR(255),
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -69,8 +70,16 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log (timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_log_username ON audit_log (username);
 
 INSERT INTO users (username, full_name, email, role, sip_extension, sip_password, password_hash, enabled) VALUES
-    ('admin1', 'Admin Uno', 'admin1@callcenter.local', 'Admin', '3001', 'sip3001pass', '$2b$10$EXPot4x5TnUu25w1Jo9coOgeJUqvkijPWpKXF1WQhEAnv3MP5DMt2', TRUE)
+    ('admin1', 'Admin Uno', 'admin1@callcenter.local', 'Admin', '3001', 'sip3001pass', '$2b$10$9BsuCKyssqlHDeKSQehNUur5K3BOJ7BE8OpOhbUzzxcdaMcKn8k7m', TRUE),
+    ('admin2', 'Admin Dos', 'admin2@callcenter.local', 'AgenteCallCenter', '3002', 'sip3002pass', '$2b$10$2gXsw2jwqORF0wlQ6peWM.wqyFsf3rOI3z46YX29/5fA2usmg4O.O', TRUE),
+    ('agente1', 'Agente Uno', 'agente1@callcenter.local', 'AgenteCallCenter', '3005', 'sip3005pass', '$2b$10$4NtezVzCBApid2XDjd2RResFKKbLi24zxlqtsvXEmLAVhqgkq8WtK', TRUE),
+    ('agente2', 'Agente Dos', 'agente2@callcenter.local', 'AgenteCallCenter', '3006', 'sip3006pass', '$2b$10$lxv4k5f8HCQ2q2x8S97maely4k/cFNeDgA1pOuGY72lW8YuGDnQHi', TRUE)
 ON CONFLICT (username) DO NOTHING;
 
 -- Los usuarios adicionales se crean desde midPoint (http://localhost:8080/midpoint)
 -- con rol AgenteCallCenter y se provisionan automáticamente en Asterisk.
+-- Usuarios por defecto:
+--   admin1 / sip3001pass (ext. 3001, rol Admin)
+--   admin2 / sip3002pass (ext. 3002, rol AgenteCallCenter)
+--   agente1 / sip3005pass (ext. 3005, rol AgenteCallCenter)
+--   agente2 / sip3006pass (ext. 3006, rol AgenteCallCenter)

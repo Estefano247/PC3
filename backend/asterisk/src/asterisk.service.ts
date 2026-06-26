@@ -3,7 +3,7 @@ import { SshService } from './ssh.service';
 import { Extension } from './interfaces/extension.interface';
 import { CreateExtensionDto } from './dto/create-extension.dto';
 
-const PJSIP_CONF = '/etc/asterisk/pjsip.conf';
+const PJSIP_CONF = process.env.PJSIP_CONF_PATH || '/etc/asterisk/pjsip.conf';
 
 @Injectable()
 export class AsteriskService {
@@ -61,13 +61,12 @@ export class AsteriskService {
       throw new Error(`Extension ${extension} already exists`);
     }
 
-    const configBlock = `
-[${extension}]
+    const configBlock = `[${extension}]
 type = endpoint
 context = callcenter
 disallow = all
 allow = ulaw
-allow = alaw
+allow = opus
 auth = ${extension}-auth
 aors = ${extension}
 callerid = "${displayName}" <${extension}>
@@ -86,20 +85,17 @@ type = aor
 max_contacts = 1
 `;
 
-    const escaped = configBlock
-      .replace(/'/g, "'\\''")
-      .replace(/"/g, '\\"')
-      .replace(/\n/g, '\\n');
-
+    const b64 = Buffer.from(configBlock).toString('base64');
     await this.ssh.executeCommand(
-      `printf '%b' "${escaped}" >> "${PJSIP_CONF}"`,
+      `echo '${b64}' | base64 -d >> "${PJSIP_CONF}"`,
     );
     await this.reload();
     this.logger.log(`Extension ${extension} provisioned successfully`);
   }
 
   async removeExtension(extension: string): Promise<void> {
-    const cmd = `sed -i "/^\\[${extension}\\]/,/^$/d" "${PJSIP_CONF}"`;
+    const escaped = extension.replace(/[^a-zA-Z0-9_-]/g, '');
+    const cmd = `sed -i "/^\\[${escaped}\\]/,/^$/d" "${PJSIP_CONF}"`;
     await this.ssh.executeCommand(cmd);
     await this.reload();
     this.logger.log(`Extension ${extension} removed successfully`);

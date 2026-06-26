@@ -30,7 +30,7 @@
             <icscdbtable:database>callcenter</icscdbtable:database>
             <icscdbtable:table>users</icscdbtable:table>
             <icscdbtable:keyColumn>id</icscdbtable:keyColumn>
-            <icscdbtable:passwordColumn>password</icscdbtable:passwordColumn>
+            <icscdbtable:passwordColumn>sip_password</icscdbtable:passwordColumn>
             <icscdbtable:jdbcDriver>org.postgresql.Driver</icscdbtable:jdbcDriver>
             <icscdbtable:jdbcUrlTemplate>jdbc:postgresql://%h:%p/%d</icscdbtable:jdbcUrlTemplate>
             <icscdbtable:enableEmptyString>true</icscdbtable:enableEmptyString>

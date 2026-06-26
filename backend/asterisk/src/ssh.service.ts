@@ -14,13 +14,18 @@ export class SshService implements OnModuleInit {
   onModuleInit() {
     this.sshHost = process.env.ASTERISK_SSH_HOST || 'asterisk';
     this.sshPort = Number(process.env.ASTERISK_SSH_PORT) || 22;
-    this.sshUser = process.env.ASTERISK_SSH_USER || 'root';
+    this.sshUser = process.env.ASTERISK_SSH_USER || 'provision';
 
     const keyPath = process.env.ASTERISK_SSH_KEY;
     if (keyPath) {
-      const resolvedPath = path.resolve(keyPath);
-      this.sshKey = fs.readFileSync(resolvedPath, 'utf-8');
-      this.logger.log(`SSH key loaded from ${resolvedPath}`);
+      try {
+        const resolvedPath = path.resolve(keyPath);
+        this.sshKey = fs.readFileSync(resolvedPath, 'utf-8');
+        this.logger.log(`SSH key loaded from ${resolvedPath}`);
+      } catch (error) {
+        this.logger.error(`Failed to load SSH key from ${keyPath}: ${error.message}`);
+        this.sshKey = '';
+      }
     } else {
       this.logger.warn('ASTERISK_SSH_KEY not set; SSH will likely fail');
     }

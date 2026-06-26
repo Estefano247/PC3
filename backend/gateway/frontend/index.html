@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CallCenter WebPhone</title>
-    <link rel="stylesheet" href="style.css?v=2">
+    <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
     <div class="container">
@@ -32,35 +32,35 @@
         <!-- Web Login Form -->
         <div class="login-form" id="webLoginForm">
             <h3>Inicio de sesión</h3>
-            <div class="form-group">
-                <label>Usuario</label>
-                <input type="text" id="webUsername" value="admin1" placeholder="Usuario">
-            </div>
-            <div class="form-group">
-                <label>Contraseña</label>
-                <input type="password" id="webPassword" value="sip3001pass" placeholder="Contraseña">
-            </div>
-            <button class="btn btn-primary" id="webLoginBtn">Iniciar sesión</button>
-            <div id="webLoginError" class="error-message hidden"></div>
+            <form id="webLoginFormTag">
+                <div class="form-group">
+                    <label>Usuario</label>
+                    <input type="text" id="webUsername" placeholder="Usuario" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label>Contraseña</label>
+                    <input type="password" id="webPassword" placeholder="Contraseña" autocomplete="current-password">
+                </div>
+                <button class="btn btn-primary" id="webLoginBtn" type="button">Iniciar sesión</button>
+                <div id="webLoginError" class="error-message hidden"></div>
+            </form>
         </div>
 
-        <!-- SIP Registration Form -->
+        <!-- SIP Registration (auto after login, shown only on error) -->
         <div class="login-form hidden" id="sipLoginForm">
-            <h3>Registro SIP</h3>
-            <div class="form-group">
-                <label>Extensión SIP</label>
-                <input type="text" id="extension" value="1001" placeholder="1001">
-            </div>
-            <div class="form-group">
-                <label>Contraseña SIP</label>
-                <input type="password" id="sipPassword" value="sip1001pass" placeholder="Contraseña SIP">
-            </div>
-            <div class="form-group">
-                <label>Servidor WebSocket</label>
-                <input type="text" id="server" value="localhost:8088/ws" placeholder="host:port/path">
-            </div>
-            <button class="btn btn-primary" id="sipLoginBtn">Registrar SIP</button>
-            <button class="btn btn-secondary" id="sipSkipBtn" style="margin-top:8px;">Saltar registro SIP</button>
+            <h3>Registro SIP manual</h3>
+            <form id="sipLoginFormTag">
+                <div class="form-group">
+                    <label>Extensión SIP</label>
+                    <input type="text" id="extension" placeholder="1001" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label>Contraseña SIP</label>
+                    <input type="password" id="sipPassword" placeholder="Contraseña SIP" autocomplete="current-password">
+                </div>
+                <button class="btn btn-primary" id="sipLoginBtn" type="button">Reintentar registro SIP</button>
+                <button class="btn btn-secondary" id="sipSkipBtn" style="margin-top:8px;" type="button">Saltar registro SIP</button>
+            </form>
         </div>
 
         <!-- Phone Tab -->
@@ -83,6 +83,18 @@
 
                 <div class="call-input">
                     <input type="text" id="targetExtension" placeholder="Extensión destino" maxlength="4">
+                </div>
+
+                <div class="call-controls-row" id="callControls">
+                    <button class="btn btn-icon" id="muteBtn" title="Silenciar">
+                        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                        <span>Silenciar</span>
+                    </button>
+                    <button class="btn btn-icon" id="holdBtn" title="Retener">
+                        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                        <span>Retener</span>
+                    </button>
+
                 </div>
 
                 <div class="call-actions">
@@ -131,6 +143,6 @@
     </div>
 
     <script src="js/sip.js?v=4"></script>
-    <script src="js/app.js?v=3"></script>
+    <script src="js/app.js?v=4"></script>
 </body>
 </html>

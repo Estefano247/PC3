@@ -4,6 +4,8 @@
 
 Solución integral basada en microservicios y open source que integra una central telefónica Asterisk (PBX) con un sistema de gestión de identidades midPoint (IAM) y un backend NestJS en multi-repo, orquestado con Docker y cumpliendo estándares ISO 27001 e ISO 25010.
 
+Características del frontend WebPhone: llamadas WebRTC con SIP.js, mute/hold, grabaciones con URLs pre-firmadas (sin exposición pública).
+
 ## Arquitectura
 
 ```
@@ -42,11 +44,11 @@ Solución integral basada en microservicios y open source que integra una centra
 │  │  (recordings/)│  upload   │  (fs.watch)    ││                              │
 │  └──────┬───────┘           └────────────────┘│                              │
 │         │                                      │                              │
-│         │ proxy (nginx → minio:9000)  ws (nginx → asterisk:8088/ws)           │
-│  ┌──────▼──────────────┐                     │                                  │
-│  │  Frontend:3000       │◄────────────────────┘                                  │
-│  │  (SIP.js + Nginx)    │                                                        │
-│  └─────────────────────┘                                                        │
+│         │  ws (nginx → asterisk:8088/ws)    GET /api/recordings (JWT)           │
+│  ┌──────▼──────────────────────┐             │                                  │
+│  │  Frontend:3000              │◄────────────┘                                  │
+│  │  (SIP.js + mute/hold/DTMF)  │                                                 │
+│  └─────────────────────────────┘                                                │
 └────────────────────────────────────────────────────────────────────┼──────────────┘
                                                                       │
                                                             ┌─────────▼──────────┐
@@ -70,12 +72,13 @@ Solución integral basada en microservicios y open source que integra una centra
 | Asterisk Manager | NestJS 10 (TCP microservice) | 3004 |
 | Almacenamiento S3 | MinIO | 9000 (API) |
 | Recorder Service | NestJS 10 (TCP microservice) | 3005 |
-| Frontend WebRTC | SIP.js 0.21 + Nginx | 3000 |
+| Frontend WebRTC | SIP.js + Nginx (mute/hold) | 3000 |
 | Softphones | MicroSIP / Zoiper / Linphone | - |
 
 ## Requisitos Previos
 
 - Docker Engine 24+ y Docker Compose 2.20+
+- Node.js 18+ y npm (para desarrollo local sin Docker)
 - Git 2.30+
 - PowerShell 7+ (para tests de integración en Windows)
 - Navegador moderno con WebRTC (Chrome/Firefox/Edge)
@@ -89,95 +92,147 @@ Solución integral basada en microservicios y open source que integra una centra
 git clone <repo-url>
 cd pc3
 
-# 2. Copiar y editar variables de entorno
-cp .env.example .env
-
-# 3. Iniciar servicios (primera vez o tras cambios)
-docker compose down --volumes
+# 2. Iniciar servicios
 docker compose up -d --build
 
-# 4. Verificar estado
+# 3. Verificar estado
 docker compose ps
 
-# 5. Ejecutar tests de integración
-pwsh tests/run-all-tests.ps1
-
-# 6. Acceder al WebPhone
+# 4. Acceder al WebPhone
 #    URL: http://localhost:3000
-#    Servidor WebSocket:  localhost:8088/ws (preconfigurado)
-#    Extensión:           3001 (admin)
-#    Contraseña:          sip3001pass
+#    Usuario:            admin1
+#    Contraseña:         sip3001pass
+#    (El registro SIP se realiza automáticamente tras el login web)
 
-# 7. Acceder a midPoint (IAM) para crear nuevos usuarios
+# 5. Acceder a midPoint (IAM)
 #    URL: http://localhost:8080/midpoint
 #    Usuario: administrator
-#    Contraseña: 5ecr3t
-#    Los usuarios creados con rol AgenteCallCenter se provisionan automáticamente en Asterisk.
+#    Contraseña: Chang3M3!
 
-# 8. Ver logs
+# 6. Ver logs
 docker compose logs -f
 ```
 
-> **Nota:** La contraseña admin de midPoint es `5ecr3t` (default del InitialDataImport). La variable `MP_ADMIN_PASSWORD` del docker-compose no se aplica porque el entrypoint personalizado (`init-midpoint.sh`) reemplaza al oficial. Si se necesita otra contraseña, debe modificarse `init-midpoint.sh`.
+## Desarrollo Local (sin Docker)
+
+Para desarrollo sin Docker, cada microservicio se ejecuta individualmente con `npm run start:dev`.
+
+### Prerrequisitos
+
+- Node.js 18+
+- PostgreSQL 15 en `localhost:5432` con las bases `callcenter` y `midpoint`
+- Asterisk 20 con SSH habilitado (usuario `provision`)
+- MinIO en `localhost:9000`
+
+### Iniciar servicios en orden
+
+```bash
+# 1. Auth Service (puerto 3002)
+cd backend/auth
+npm install
+npm run start:dev
+
+# 2. CDR Service (puerto 3003)
+cd backend/cdr
+npm install
+npm run start:dev
+
+# 3. Asterisk Manager (puerto 3004)
+cd backend/asterisk
+npm install
+npm run start:dev
+
+# 4. API Gateway (puerto 3001)
+cd backend/gateway
+npm install
+npm run start:dev
+
+# 5. Frontend (puerto 3000) — usar cualquier servidor estático
+cd backend/gateway/frontend
+npx serve . -p 3000
+```
+
+### Configuración de red en desarrollo
+
+En modo Docker, el frontend (`app.js`) usa `API_BASE = '/api'` y Nginx
+proxy inverso redirige las peticiones al Gateway (`api-gateway:3001`).
+No se requieren cambios de configuración.
+
+> **Para desarrollo local sin Docker:** Cambiar `API_BASE` en `app.js` a
+> `http://localhost:3001/api`. El Gateway permite orígenes `http://localhost:3000`
+> (configurado en `backend/gateway/src/main.ts`).
+
+> La contraseña admin de midPoint es `Chang3M3!` (por defecto). La variable `MP_ADMIN_PASSWORD` del docker-compose permite cambiarla.
 >
-> El comando `docker compose down --volumes` elimina los volúmenes persistentes. Es necesario la **primera vez** o tras modificar configuraciones de Asterisk (`pjsip.conf`, `extensions.conf`) para que se copien los archivos actualizados al volumen. Si solo reiniciás servicios sin `--volumes`, se usará la configuración antigua del volumen persistente.
+> Para recargar configuraciones de Asterisk (`pjsip.conf`, `extensions.conf`) tras cambios, se necesita: `docker compose down && docker volume rm pc3_asterisk-config && docker compose up -d --build`.
 
 ## Cómo usar el WebPhone
 
 El WebPhone permite llamadas entre extensiones desde el navegador usando WebRTC.
 
-> Solo existe la extensión admin `3001` por defecto. Para probar llamadas entre dos
-> extensiones, primero creá una extensión adicional desde midPoint (ver sección **Crear usuarios desde midPoint**).
+> Existen 4 usuarios seed por defecto (admin1, admin2, agente1, agente2). Para probar llamadas entre dos extensiones usa agente1 (3005) y agente2 (3006). Se pueden crear usuarios adicionales desde midPoint (ver sección **Crear usuarios desde midPoint**).
 
-### 1. Iniciar sesión como admin
+### 1. Iniciar sesión web como admin
 
-Entrá a `http://localhost:3000`, ingresá:
+Ingresa a `http://localhost:3000` e ingresa:
 
 | Campo | Valor |
 |-------|-------|
-| Extensión | `3001` |
-| Contraseña | `sip3001pass` |
-| Servidor | `localhost:8088/ws` |
+| Usuario | `agente1` |
+| Contraseña | `sip3005pass` |
 
-Hacé clic en **Registrar**. Si todo funciona, verás "Registrado como 3001" con el indicador verde.
+Haz clic en **Iniciar sesión**. Si todo funciona, se autenticará contra el backend
+y automáticamente registrará la extensión SIP 3005. Verás "Registrado como 3005" con el
+indicador verde.
 
-### 2. Crear una extensión adicional desde midPoint
+### 2. Crear un usuario adicional desde midPoint
 
-Antes de probar llamadas, creá un segundo usuario desde midPoint:
+Antes de probar llamadas, crea un segundo usuario desde midPoint:
 
-1. Ingresá a `http://localhost:8080/midpoint` (usuario: `administrator`, contraseña: `5ecr3t`)
-2. Andá a **Usuarios → Nuevo usuario**
-3. Completá **Name** (ej: `agente2`), **Full name** (ej: `Agente 2`), asignale el rol **AgenteCallCenter**
-4. Guardá el usuario
+1. Ingresa a `http://localhost:8080/midpoint` (usuario: `administrator`, contraseña: `Chang3M3!`)
+2. Ve a **Usuarios → Nuevo usuario**
+3. Completa **Name** (ej: `agente2`), **Full name** (ej: `Agente 2`), asigna el rol **AgenteCallCenter**
+4. Guarda el usuario
 5. midPoint provisiona automáticamente la extensión SIP en Asterisk (esto puede tardar unos segundos)
 
-### 3. Registrar la nueva extensión
+### 3. Iniciar sesión con otra extensión
 
-Abrí otra pestaña/ventana en `http://localhost:3000`, ingresá los datos de la nueva
-extensión creada desde midPoint y hacé clic en **Registrar**.
+Abre otra pestaña/ventana en `http://localhost:3000`, ingresa `agente2` / `sip3006pass`
+y haz clic en **Iniciar sesión**. El SIP se registrará automáticamente como extensión 3006.
 
 ### 4. Hacer una llamada
 
-1. En una pestaña, escribí la extensión destino (ej: `3001`) en el campo de extensión destino
-2. Hacé clic en **Llamar**
+1. En una pestaña, escribe la extensión destino (ej: `3001`) en el campo de extensión destino
+2. Haz clic en **Llamar**
 3. En la otra pestaña, aparecerá la notificación de llamada entrante
-4. Hacé clic en **Responder**
+4. Haz clic en **Responder**
 5. La llamada se conecta. Se puede colgar desde cualquier extremo con **Colgar**
 
-### 5. Ver grabaciones
+### 5. Controles durante la llamada
 
-Después de colgar una llamada, cambiá a la pestaña **Grabaciones** y hacé clic en **Actualizar**. Las grabaciones aparecen listadas con un reproductor `<audio>` para escucharlas.
+Una vez conectada la llamada, aparecen dos controles:
 
-> **Tip:** Si usás Chrome, abrí una ventana de incógnito para la segunda extensión. Así evitás conflictos de WebRTC por usar la misma página.
+| Control | Función |
+|---------|---------|
+| **Silenciar** | Activa/desactiva el micrófono (indicador rojo) |
+| **Retener** | Pone/reanuda la llamada en espera (indicador ámbar) |
+
+### 6. Ver grabaciones
+
+Después de colgar una llamada, cambia a la pestaña **Grabaciones** y haz clic en **Actualizar**. Las grabaciones aparecen listadas con un reproductor `<audio>` para escucharlas. Las URLs de audio son pre-firmadas (válidas por 1 hora) y requieren autenticación JWT.
+
+> **Tip:** Si usas Chrome, abre una ventana de incógnito para la segunda extensión. Así evitas conflictos de WebRTC por usar la misma página.
 
 ### Solución de problemas comunes
 
 | Error | Causa | Solución |
 |-------|-------|----------|
-| `SIP is not defined` | SIP.js no cargó (CDN caído) | Hard refresh (**Ctrl+Shift+R**) |
-| `WebSocket closed (code: 1006)` | Puerto/path WebSocket incorrecto | Usá `localhost:8088/ws` en el campo Servidor |
-| `Permission denied` al llamar | Volumen de configuración obsoleto | Ejecutá `docker compose down --volumes` y volvé a iniciar |
-| midPoint no arranca | midPoint tarda en inicializar | Esperá 2-3 min, verificá con `docker compose ps` |
+| `POST http://localhost:3000/api/auth/login 404` | Frontend intentando usar proxy Nginx inexistente en dev | Cambiar `API_BASE` en `app.js` a `http://localhost:3001/api` (ya configurado) |
+| `SIP is not defined` | SIP.js no cargó | Hard refresh (**Ctrl+Shift+R**) |
+| `WebSocket closed (code: 1006)` | Puerto/path WebSocket incorrecto | Usa `localhost:8088/ws` en el campo Servidor |
+| `Permission denied` al llamar | Volumen de configuración obsoleto | Ejecuta `docker compose down; docker volume rm pc3_asterisk-config; docker compose up -d` |
+| midPoint no arranca | midPoint tarda en inicializar | Espera 2-3 min, verifica con `docker compose ps` |
+| Las grabaciones no cargan | Sesión JWT expirada | Reinicia sesión en el WebPhone |
 
 ## Estructura del Proyecto
 
@@ -200,8 +255,9 @@ pc3/
 │   │       ├── main.ts
 │   │       ├── app.module.ts       # ClientsModule (auth, cdr, asterisk)
 │   │       ├── app.controller.ts   # Endpoints REST
-│   │       ├── auth/               # JWT Guard + Strategy
-│   │       └── dto/
+│   │               ├── auth/               # JWT Guard + Strategy
+│   │               ├── recordings/         # Pre-signed URLs for MinIO recordings
+│   │               └── dto/
 │   │
 │   ├── auth/                        # Auth Service (TCP:3002)
 │   │   ├── package.json
@@ -276,17 +332,18 @@ pc3/
 │       ├── Dockerfile
 │       └── src/
 │           ├── main.ts
-│           ├── recorder.controller.ts
-│           ├── recorder.service.ts # fs.watch + MinIO upload
-│           └── module.ts
-│   └── frontend/                   # WebRTC WebPhone + Grabaciones
-│       ├── Dockerfile               # Nginx con proxy a MinIO
-│       ├── nginx.conf               # Proxy reverso + MinIO
-│       ├── index.html               # WebPhone UI + grabaciones
-│       ├── style.css
-│       └── js/
-│           ├── sip.js               # SIP.js (WebRTC)
-│           └── app.js               # Cliente SIP.js
+│           ├── recorder.service.ts  # fs.watch + MinIO upload
+│           └── recorder.module.ts
+│
+├── backend/gateway/frontend/        # WebRTC WebPhone + Grabaciones
+│   ├── Dockerfile                   # Nginx con resolver DNS
+│   ├── nginx.conf                   # Proxy reverso (con resolver dinámico)
+│   ├── index.html                   # WebPhone UI + mute/hold
+│   ├── style.css
+│   └── js/
+│       ├── sip.js                   # SIP.js (WebRTC)
+│       └── app.js                   # Cliente SIP con mute/hold
+│                                    # API_BASE configurable en dev vs Docker
 │
 ├── scripts/                         # Utilidades del repositorio
 │   ├── setup-git.ps1                # Inicializa Git con ramas
@@ -330,8 +387,8 @@ pc3/
 | **CDR Service** | `3003` | Consulta de registros de llamadas (TCP) |
 | **Asterisk Manager** | `3004` | Gestión de extensiones SIP vía SSH (TCP) |
 | **Recorder Service** | `3005` | Upload de grabaciones a MinIO via fs.watch (TCP) |
-| **MinIO** | `9000` | API S3 compatible |
-| **Frontend** | `3000` | WebPhone WebRTC + visor de grabaciones |
+| **MinIO** | `9000` | API S3 compatible (bucket privado) |
+| **Frontend** | `3000` | WebPhone WebRTC + mute/hold + visor de grabaciones vía API |
 
 ## Flujo de Integración (Backend NestJS)
 
@@ -380,25 +437,27 @@ Frontend / Cliente HTTP
 
 ## Mecanismo de Importación Inicial
 
-En el primer arranque, `auth-svc` ejecuta `importMidpointConfigs()` (via `OnApplicationBootstrap`):
-1. Espera a que midPoint esté saludable (healthcheck `/actuator/health`)
-2. POSTea los 3 XMLs de configuración via REST API:
+En el primer arranque, `auth-svc` ejecuta `importMidpointConfigs()` (en background tras `onApplicationBootstrap`):
+1. Espera a que midPoint esté saludable (GET sobre `/midpoint` cada 5s, máx 120 intentos)
+2. Elimina configs existentes (DELETE por OID) y las vuelve a crear (POST) via REST API:
    - **Resource** (DatabaseTableConnector → `callcenter.users`)
    - **Role** `AgenteCallCenter` (con resourceRef al resource)
    - **Object Template** (con mappings para generación de SIP extension)
-3. HTTP 409 (conflicto) se trata como éxito (config ya existe)
-4. La ejecución es fire-and-forget (no bloquea el inicio del servicio)
+3. También importa 4 usuarios seed (admin1, admin2, agente1, agente2) con rol AgenteCallCenter
+4. La importación se ejecuta en background y no bloquea el inicio del servicio TCP
+5. Los reintentos (3 intentos) manejan errores transitorios de midPoint
 
-Los endpoints REST utilizados son `POST /ws/rest/{type}` (no `/import`), y los nombres de tipo usan camelCase: `objectTemplates`.
+Los endpoints REST utilizados son `DELETE /ws/rest/{type}/{oid}` seguido de `POST /ws/rest/{type}`.
 
 ## Flujo de Grabaciones
 
 1. Asterisk MixMonitor graba la llamada a `/var/spool/asterisk/monitor/` (montado como volumen `asterisk-recordings`)
 2. `recorder-svc` (NestJS, TCP:3005) monta el mismo volumen en `/recordings` y usa `fs.watch` para detectar nuevos archivos `.wav`
-3. Detecta eventos `rename` con debounce de 2s y sube el archivo a MinIO via `minioClient.fPutObject()` al bucket `recordings`
-4. En el arranque, `recorder-svc` crea el bucket `recordings` si no existe y re-subé archivos `.wav` existentes
-5. Frontend lista grabaciones desde `http://localhost:3000/recordings/` (proxy Nginx → MinIO)
-6. Cada grabación se reproduce con `<audio>` nativo del navegador
+3. Detecta eventos `rename` y `change` con debounce de 2s y sube el archivo a MinIO via `minioClient.fPutObject()` al bucket `recordings` (privado)
+4. En el arranque, `recorder-svc` crea el bucket `recordings` si no existe (sin política pública) y re-subé archivos `.wav` existentes
+5. Frontend lista grabaciones desde `GET /api/recordings` (Gateway → MinIO) con autenticación JWT
+6. El gateway genera **URLs pre-firmadas** (válidas 1 hora) para cada archivo, el navegador reproduce con `<audio>` nativo
+7. Las URLs pre-firmadas expiran automáticamente, eliminando acceso público a las grabaciones
 
 ## Pruebas
 
@@ -482,5 +541,5 @@ El video debe mostrar:
 | 2 | Diseño y Configuración | Dockerfiles, configuración de servicios |
 | 3 | Integración | Scripts de aprovisionamiento midPoint → Asterisk |
 | 4 | Pruebas | Carga, seguridad, vulnerabilidades |
-| 5 | Backend NestJS | Multi-repo con gateway, auth, cdr, asterisk-svc, recorder-svc |
+| 5 | Backend NestJS | Multi-repo con gateway, auth, cdr, asterisk-svc, recorder-svc, recordings API |
 | 6 | Despliegue y Documentación | Orquestación final, informe, video |

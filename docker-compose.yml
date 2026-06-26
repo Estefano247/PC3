@@ -58,6 +58,7 @@ services:
       context: ./backend/asterisk/pbx
       dockerfile: Dockerfile
     container_name: callcenter-asterisk
+    hostname: asterisk
     restart: unless-stopped
     depends_on:
       midpoint:
@@ -107,6 +108,7 @@ services:
       asterisk:
         condition: service_started
     environment:
+      NODE_ENV: production
       MINIO_HOST: minio
       MINIO_PORT: "9000"
       MINIO_ACCESS_KEY: minioadmin
@@ -128,7 +130,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      midpoint:
+        condition: service_started
     environment:
+      NODE_ENV: production
       DB_HOST: db
       DB_PORT: "5432"
       DB_USERNAME: ${POSTGRES_USER:-callcenter}
@@ -156,6 +161,7 @@ services:
       db:
         condition: service_healthy
     environment:
+      NODE_ENV: production
       DB_HOST: db
       DB_PORT: "5432"
       DB_USERNAME: ${POSTGRES_USER:-callcenter}
@@ -176,6 +182,7 @@ services:
       asterisk:
         condition: service_started
     environment:
+      NODE_ENV: production
       ASTERISK_SSH_HOST: asterisk
       ASTERISK_SSH_PORT: "22"
       ASTERISK_SSH_USER: provision
@@ -200,11 +207,20 @@ services:
         condition: service_started
       asterisk-svc:
         condition: service_started
+      minio:
+        condition: service_healthy
     environment:
+      NODE_ENV: production
       AUTH_HOST: auth-svc
       CDR_HOST: cdr-svc
       ASTERISK_HOST: asterisk-svc
       JWT_SECRET: ${JWT_SECRET:-callcenter-secret-key}
+      MINIO_HOST: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      MINIO_BUCKET: recordings
+      MINIO_PUBLIC_ENDPOINT: localhost:9000
     ports:
       - "3001:3001"
     networks:

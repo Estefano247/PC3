@@ -1,7 +1,7 @@
 FROM debian:bullseye-slim AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV ASTERISK_VERSION=20.20.0
+ENV ASTERISK_VERSION=20.20.1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/src
-RUN wget -q https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-${ASTERISK_VERSION}.tar.gz \
+RUN curl -sSLO https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-${ASTERISK_VERSION}.tar.gz \
     && tar xzf asterisk-${ASTERISK_VERSION}.tar.gz
 WORKDIR /usr/src/asterisk-${ASTERISK_VERSION}
 RUN ./configure --with-pjproject-bundled --with-jansson-bundled --with-mysqlclient --with-srtp

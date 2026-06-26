@@ -29,6 +29,7 @@ export class RecorderService implements OnApplicationBootstrap, OnApplicationShu
     await this.ensureBucket();
     await this.uploadExistingFiles();
     this.startWatcher();
+    this.startPoller();
   }
 
   onApplicationShutdown() {
@@ -49,21 +50,7 @@ export class RecorderService implements OnApplicationBootstrap, OnApplicationShu
           this.logger.log(`Bucket '${this.bucketName}' already exists`);
         }
 
-        await this.minioClient.setBucketPolicy(
-          this.bucketName,
-          JSON.stringify({
-            Version: '2012-10-17',
-            Statement: [
-              {
-                Effect: 'Allow',
-                Principal: '*',
-                Action: ['s3:GetObject'],
-                Resource: [`arn:aws:s3:::${this.bucketName}/*`],
-              },
-            ],
-          }),
-        );
-        this.logger.log(`Bucket '${this.bucketName}' set to public read`);
+        this.logger.log(`Bucket '${this.bucketName}' configured (private access)`);
         return;
       } catch (error) {
         this.logger.warn(`MinIO not ready (attempt ${i}/${maxRetries}): ${error.message}`);
@@ -78,7 +65,7 @@ export class RecorderService implements OnApplicationBootstrap, OnApplicationShu
 
   private async uploadExistingFiles() {
     try {
-      const files = fs.readdirSync(this.watchDir).filter((f) => f.endsWith('.wav'));
+      const files = (await fs.promises.readdir(this.watchDir)).filter((f) => f.endsWith('.wav'));
       for (const file of files) {
         await this.uploadFile(path.join(this.watchDir, file));
       }
@@ -96,7 +83,7 @@ export class RecorderService implements OnApplicationBootstrap, OnApplicationShu
     }
 
     this.watcher = fs.watch(this.watchDir, (eventType, filename) => {
-      if (eventType === 'rename' && filename && filename.endsWith('.wav')) {
+      if (filename && filename.endsWith('.wav')) {
         const filePath = path.join(this.watchDir, filename);
 
         const existing = this.pendingUploads.get(filename);
@@ -104,13 +91,41 @@ export class RecorderService implements OnApplicationBootstrap, OnApplicationShu
 
         const timeout = setTimeout(async () => {
           this.pendingUploads.delete(filename);
+          try {
+            const stat = await fs.promises.stat(filePath);
+            if (Date.now() - stat.mtimeMs < 5000) return;
+          } catch {
+            return;
+          }
           await this.uploadFile(filePath);
-        }, 2000);
+        }, 5000);
         this.pendingUploads.set(filename, timeout);
       }
     });
 
     this.logger.log(`Watching ${this.watchDir} for new recordings`);
+  }
+
+  private startPoller() {
+    setInterval(async () => {
+      try {
+        const files = (await fs.promises.readdir(this.watchDir)).filter((f) => f.endsWith('.wav'));
+        for (const file of files) {
+          if (this.uploadedLog.has(file)) continue;
+          const filePath = path.join(this.watchDir, file);
+          try {
+            const stat = await fs.promises.stat(filePath);
+            if (Date.now() - stat.mtimeMs < 5000) continue;
+          } catch {
+            continue;
+          }
+          await this.uploadFile(filePath);
+        }
+      } catch (err) {
+        this.logger.warn(`Polling scan failed: ${err.message}`);
+      }
+    }, 15000);
+    this.logger.log(`Polling ${this.watchDir} every 15s for missed recordings`);
   }
 
   private stopWatcher() {

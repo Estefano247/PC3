@@ -24,14 +24,6 @@
                     </source>
                 </outbound>
             </attribute>
-            <attribute>
-                <c:ref>ri:role</c:ref>
-                <outbound>
-                    <source>
-                        <path>role</path>
-                    </source>
-                </outbound>
-            </attribute>
         </construction>
     </inducement>
 </role>

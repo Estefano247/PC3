@@ -1,12 +1,12 @@
-FROM node:18-alpine AS builder
+FROM node:18.20-alpine AS builder
 WORKDIR /app
 COPY package*.json nest-cli.json tsconfig.json ./
-RUN npm ci
+RUN npm install
 COPY src ./src
 RUN npm run build
-RUN npm ci --only=production && cp -R node_modules /prod_modules
+RUN npm install --only=production && cp -R node_modules /prod_modules
 
-FROM node:18-alpine
+FROM node:18.20-alpine
 WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /prod_modules ./node_modules

@@ -265,6 +265,54 @@ body {
     display: none;
 }
 
+/* In-call controls row */
+.call-controls-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    justify-content: center;
+}
+
+.btn-icon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 16px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    color: #94a3b8;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 72px;
+}
+
+.btn-icon:hover {
+    border-color: #3b82f6;
+    color: #e2e8f0;
+    background: #1e293b;
+}
+
+.btn-icon.active {
+    border-color: #f59e0b;
+    color: #f59e0b;
+    background: rgba(245,158,11,0.1);
+}
+
+.btn-icon.active-danger {
+    border-color: #ef4444;
+    color: #ef4444;
+    background: rgba(239,68,68,0.1);
+}
+
+/* incoming call active state */
+.incoming-call-content .btn-success:disabled,
+.incoming-call-content .btn-danger:disabled {
+    opacity: 0.4;
+}
+
 /* Tabs */
 .tabs {
     display: flex;
@@ -402,11 +450,17 @@ body {
 
 /* Incoming call notification */
 .incoming-call {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     background: rgba(0,0,0,0.85);
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 20px;
+    z-index: 1000;
     animation: slideIn 0.3s ease-out;
 }
 

@@ -3,6 +3,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { JwtModule } from '@nestjs/jwt';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
+import { RecordingsModule } from './recordings/recordings.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { AuthModule } from './auth/auth.module';
       signOptions: { expiresIn: '24h' },
     }),
     AuthModule,
+    RecordingsModule,
   ],
   controllers: [AppController],
 })
