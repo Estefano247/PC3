@@ -30,7 +30,7 @@
             <icscdbtable:database>callcenter</icscdbtable:database>
             <icscdbtable:table>users</icscdbtable:table>
             <icscdbtable:keyColumn>id</icscdbtable:keyColumn>
-            <icscdbtable:passwordColumn>sip_password</icscdbtable:passwordColumn>
+            <icscdbtable:nameColumn>username</icscdbtable:nameColumn>
             <icscdbtable:jdbcDriver>org.postgresql.Driver</icscdbtable:jdbcDriver>
             <icscdbtable:jdbcUrlTemplate>jdbc:postgresql://%h:%p/%d</icscdbtable:jdbcUrlTemplate>
             <icscdbtable:enableEmptyString>true</icscdbtable:enableEmptyString>
@@ -92,20 +92,6 @@
                 </inbound>
             </attribute>
             <attribute>
-                <ref>ri:role</ref>
-                <displayName>Role</displayName>
-                <outbound>
-                    <source>
-                        <path>$user/role</path>
-                    </source>
-                </outbound>
-                <inbound>
-                    <target>
-                        <path>$user/role</path>
-                    </target>
-                </inbound>
-            </attribute>
-            <attribute>
                 <ref>ri:email</ref>
                 <displayName>Email</displayName>
                 <outbound>
@@ -138,11 +124,6 @@
                     <outbound/>
                 </administrativeStatus>
             </activation>
-            <credentials>
-                <password>
-                    <outbound/>
-                </password>
-            </credentials>
         </objectType>
     </schemaHandling>
 

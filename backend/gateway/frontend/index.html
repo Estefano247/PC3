@@ -4,145 +4,257 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CallCenter WebPhone</title>
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>CallCenter WebPhone</h1>
-            <p>Central Telefónica Unificada</p>
+            <div class="header-brand">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                    <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
+                </svg>
+                <div>
+                    <h1>CallCenter WebPhone</h1>
+                    <p>Central Telefónica Unificada</p>
+                </div>
+            </div>
         </div>
 
-        <div class="status-bar">
+        <div class="status-bar" id="statusBar">
             <div class="status-indicator">
                 <span class="status-dot" id="statusDot"></span>
                 <span id="statusText">Desconectado</span>
             </div>
-            <div>
-                Ext: <span id="extension-display">---</span>
+            <div class="status-right">
+                <span class="call-timer hidden" id="callTimer">00:00</span>
+                <span class="ext-badge">Ext: <strong id="extensionDisplay">---</strong></span>
+                <button class="btn-logout hidden" id="logoutBtn" title="Cerrar sesión">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+                </button>
             </div>
         </div>
 
-        <!-- Tabs -->
-        <div class="tabs">
-            <button class="tab active" data-tab="phone" id="tabPhone">Teléfono</button>
-            <button class="tab" data-tab="recordings" id="tabRecordings">Grabaciones</button>
+        <div class="tabs" id="mainTabs">
+            <button class="tab active" data-tab="phone"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg> Teléfono</button>
+            <button class="tab" data-tab="contacts"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg> Contactos</button>
+            <button class="tab" data-tab="history"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg> Historial</button>
+            <button class="tab" data-tab="recordings"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.09-.6-.39-1.14-1-1.14z"/></svg> Grabaciones</button>
         </div>
 
-        <!-- Web Login Form -->
-        <div class="login-form" id="webLoginForm">
-            <h3>Inicio de sesión</h3>
-            <form id="webLoginFormTag">
-                <div class="form-group">
-                    <label>Usuario</label>
-                    <input type="text" id="webUsername" placeholder="Usuario" autocomplete="username">
+        <div id="webLoginForm" class="login-section">
+            <div class="login-card">
+                <div class="login-icon">
+                    <svg viewBox="0 0 24 24" width="48" height="48" fill="#3b82f6"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
                 </div>
-                <div class="form-group">
-                    <label>Contraseña</label>
-                    <input type="password" id="webPassword" placeholder="Contraseña" autocomplete="current-password">
-                </div>
-                <button class="btn btn-primary" id="webLoginBtn" type="button">Iniciar sesión</button>
-                <div id="webLoginError" class="error-message hidden"></div>
-            </form>
+                <h3>Inicio de sesión</h3>
+                <form id="webLoginFormTag" autocomplete="on">
+                    <div class="form-group">
+                        <label for="webUsername">Usuario</label>
+                        <input type="text" id="webUsername" placeholder="ej: agente1" autocomplete="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="webPassword">Contraseña</label>
+                        <input type="password" id="webPassword" placeholder="Contraseña" autocomplete="current-password" required>
+                    </div>
+                    <div id="webLoginError" class="error-message hidden"></div>
+                    <button class="btn btn-primary btn-lg" id="webLoginBtn" type="button">
+                        <span class="btn-text">Iniciar sesión</span>
+                        <span class="btn-spinner hidden"></span>
+                    </button>
+                </form>
+            </div>
         </div>
 
-        <!-- SIP Registration (auto after login, shown only on error) -->
-        <div class="login-form hidden" id="sipLoginForm">
-            <h3>Registro SIP manual</h3>
-            <form id="sipLoginFormTag">
-                <div class="form-group">
-                    <label>Extensión SIP</label>
-                    <input type="text" id="extension" placeholder="1001" autocomplete="username">
+        <div id="sipLoginForm" class="login-section hidden">
+            <div class="login-card">
+                <div class="login-icon">
+                    <svg viewBox="0 0 24 24" width="48" height="48" fill="#22c55e"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
                 </div>
-                <div class="form-group">
-                    <label>Contraseña SIP</label>
-                    <input type="password" id="sipPassword" placeholder="Contraseña SIP" autocomplete="current-password">
-                </div>
-                <button class="btn btn-primary" id="sipLoginBtn" type="button">Reintentar registro SIP</button>
-                <button class="btn btn-secondary" id="sipSkipBtn" style="margin-top:8px;" type="button">Saltar registro SIP</button>
-            </form>
+                <h3>Registro SIP</h3>
+                <p class="login-sub">Registra tu extensión para realizar llamadas</p>
+                <form id="sipLoginFormTag" autocomplete="on">
+                    <div class="form-group">
+                        <label for="sipExtension">Extensión SIP</label>
+                        <input type="text" id="sipExtension" placeholder="3001" autocomplete="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="sipPasswordField">Contraseña SIP</label>
+                        <input type="password" id="sipPasswordField" placeholder="Contraseña SIP" autocomplete="current-password">
+                    </div>
+                    <button class="btn btn-primary btn-lg" id="sipLoginBtn" type="button">
+                        <span class="btn-text">Registrar SIP</span>
+                        <span class="btn-spinner hidden"></span>
+                    </button>
+                    <button class="btn btn-ghost" id="sipSkipBtn" type="button">Saltar registro SIP</button>
+                </form>
+            </div>
         </div>
 
-        <!-- Phone Tab -->
         <div class="tab-content active" id="phoneTab">
-            <div class="call-section hidden" id="callSection">
+            <div class="phone-view" id="callSection">
+                <div class="call-display" id="callDisplay">
+                    <div class="call-info">
+                        <span class="call-party" id="callParty">---</span>
+                        <span class="call-status-label" id="callStatusLabel">Esperando</span>
+                    </div>
+                </div>
+
                 <div class="dialpad" id="dialpad">
-                    <button class="dial-btn" data-value="1">1</button>
-                    <button class="dial-btn" data-value="2">2</button>
-                    <button class="dial-btn" data-value="3">3</button>
-                    <button class="dial-btn" data-value="4">4</button>
-                    <button class="dial-btn" data-value="5">5</button>
-                    <button class="dial-btn" data-value="6">6</button>
-                    <button class="dial-btn" data-value="7">7</button>
-                    <button class="dial-btn" data-value="8">8</button>
-                    <button class="dial-btn" data-value="9">9</button>
-                    <button class="dial-btn" data-value="*">*</button>
-                    <button class="dial-btn" data-value="0">0</button>
-                    <button class="dial-btn" data-value="#">#</button>
+                    <button class="dial-btn" data-value="1"><span>1</span><small></small></button>
+                    <button class="dial-btn" data-value="2"><span>2</span><small>ABC</small></button>
+                    <button class="dial-btn" data-value="3"><span>3</span><small>DEF</small></button>
+                    <button class="dial-btn" data-value="4"><span>4</span><small>GHI</small></button>
+                    <button class="dial-btn" data-value="5"><span>5</span><small>JKL</small></button>
+                    <button class="dial-btn" data-value="6"><span>6</span><small>MNO</small></button>
+                    <button class="dial-btn" data-value="7"><span>7</span><small>PQRS</small></button>
+                    <button class="dial-btn" data-value="8"><span>8</span><small>TUV</small></button>
+                    <button class="dial-btn" data-value="9"><span>9</span><small>WXYZ</small></button>
+                    <button class="dial-btn" data-value="*"><span>*</span><small></small></button>
+                    <button class="dial-btn" data-value="0"><span>0</span><small>+</small></button>
+                    <button class="dial-btn dial-btn-backspace" data-value="backspace"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M22 3H7c-.69 0-1.23.35-1.59.88L0 12l5.41 8.11c.36.53.9.89 1.59.89h15c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-3 12.59L17.59 17 14 13.41 10.41 17 9 15.59 12.59 12 9 8.41 10.41 7 14 10.59 17.59 7 19 8.41 15.41 12 19 15.59z"/></svg></button>
                 </div>
 
                 <div class="call-input">
-                    <input type="text" id="targetExtension" placeholder="Extensión destino" maxlength="4">
+                    <input type="text" id="targetExtension" placeholder="Extensión destino" maxlength="6" inputmode="numeric" pattern="[0-9]*">
+                    <button class="btn btn-icon-only" id="clearBtn" title="Limpiar">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                    </button>
                 </div>
 
                 <div class="call-controls-row" id="callControls">
-                    <button class="btn btn-icon" id="muteBtn" title="Silenciar">
-                        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                    <button class="ctrl-btn" id="muteBtn" title="Silenciar">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.09-.6-.39-1.14-1-1.14z"/></svg>
                         <span>Silenciar</span>
                     </button>
-                    <button class="btn btn-icon" id="holdBtn" title="Retener">
-                        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    <button class="ctrl-btn" id="holdBtn" title="Retener">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
                         <span>Retener</span>
                     </button>
-
+                    <button class="ctrl-btn" id="dtmfBtn" title="Marcar DTMF">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                        <span>DTMF</span>
+                    </button>
                 </div>
 
                 <div class="call-actions">
-                    <button class="btn btn-success" id="callBtn">Llamar</button>
-                    <button class="btn btn-danger hidden" id="hangupBtn">Colgar</button>
-                    <button class="btn btn-danger" id="logoutBtn">Salir</button>
-                </div>
-
-                <div class="audio-controls">
-                    <audio id="remoteAudio" autoplay></audio>
+                    <button class="action-btn action-call" id="callBtn">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+                    </button>
+                    <button class="action-btn action-hangup hidden" id="hangupBtn">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
+                    </button>
                 </div>
             </div>
 
-            <div class="call-log">
-                <h3>Registro de llamadas</h3>
-                <div class="log-entries" id="logEntries">
-                    <div class="log-entry" style="color: #64748b;">
-                        <span>Inicia sesión para ver llamadas</span>
-                    </div>
+            <audio id="remoteAudio" autoplay playsinline style="display:none;"></audio>
+
+            <div class="section-divider">
+                <span>Registro de llamadas</span>
+            </div>
+
+            <div class="log-entries" id="logEntries">
+                <div class="log-empty">
+                    <svg viewBox="0 0 24 24" width="32" height="32" fill="#475569"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H5.17L4 17.17V4h16v12z"/></svg>
+                    <p>Inicia sesión para ver llamadas</p>
                 </div>
             </div>
         </div>
 
-        <!-- Recordings Tab -->
+        <div class="tab-content" id="contactsTab">
+            <div class="contacts-header">
+                <div class="search-box">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="#64748b"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                    <input type="text" id="contactsSearch" placeholder="Buscar contacto...">
+                </div>
+                <button class="btn btn-sm btn-primary" id="addContactBtn">+ Añadir</button>
+            </div>
+            <div class="contacts-list" id="contactsList">
+                <div class="contacts-empty">
+                    <svg viewBox="0 0 24 24" width="32" height="32" fill="#475569"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                    <p>No hay contactos</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="historyTab">
+            <div class="history-header">
+                <h3>Historial de llamadas</h3>
+                <button class="btn btn-sm btn-ghost" id="clearHistoryBtn">Limpiar</button>
+            </div>
+            <div class="history-list" id="historyList">
+                <div class="history-empty">
+                    <svg viewBox="0 0 24 24" width="32" height="32" fill="#475569"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+                    <p>No hay llamadas registradas</p>
+                </div>
+            </div>
+        </div>
+
         <div class="tab-content" id="recordingsTab">
             <div class="recordings-header">
-                <h3>Grabaciones de llamadas</h3>
-                <button class="btn btn-primary" id="refreshRecordings" style="width:auto; padding:6px 16px; font-size:12px;">Actualizar</button>
+                <div class="search-box">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="#64748b"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                    <input type="text" id="recordingsSearch" placeholder="Buscar grabación...">
+                </div>
+                <button class="btn btn-sm btn-primary" id="refreshRecordings">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                    Actualizar
+                </button>
             </div>
             <div class="recordings-list" id="recordingsList">
-                <div class="loading">Cargando grabaciones...</div>
+                <div class="loading">
+                    <span class="spinner"></span>
+                    <p>Cargando grabaciones...</p>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Incoming call notification -->
     <div class="incoming-call hidden" id="incomingCall">
         <div class="incoming-call-content">
-            <div class="incoming-call-icon">&#x1F4DE;</div>
-            <p>Llamada entrante de <strong id="callerName">...</strong></p>
+            <div class="incoming-pulse">
+                <svg viewBox="0 0 24 24" width="48" height="48" fill="#22c55e"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+            </div>
+            <p>Llamada entrante de</p>
+            <strong id="callerName">...</strong>
             <div class="incoming-call-actions">
-                <button class="btn btn-success" id="answerBtn">Responder</button>
-                <button class="btn btn-danger" id="rejectBtn">Rechazar</button>
+                <button class="action-btn action-hangup" id="rejectBtn">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08c-.18-.17-.29-.42-.29-.7 0-.28.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>
+                    Rechazar
+                </button>
+                <button class="action-btn action-call" id="answerBtn">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+                    Responder
+                </button>
             </div>
         </div>
     </div>
 
-    <script src="js/sip.js?v=4"></script>
-    <script src="js/app.js?v=4"></script>
+    <div class="dtmf-overlay hidden" id="dtmfOverlay">
+        <div class="dtmf-panel">
+            <div class="dtmf-header">
+                <span>Marcación DTMF</span>
+                <button class="btn btn-sm btn-ghost" id="dtmfCloseBtn">Cerrar</button>
+            </div>
+            <div class="dtmf-keys">
+                <button class="dtmf-key" data-value="1">1</button>
+                <button class="dtmf-key" data-value="2">2</button>
+                <button class="dtmf-key" data-value="3">3</button>
+                <button class="dtmf-key" data-value="4">4</button>
+                <button class="dtmf-key" data-value="5">5</button>
+                <button class="dtmf-key" data-value="6">6</button>
+                <button class="dtmf-key" data-value="7">7</button>
+                <button class="dtmf-key" data-value="8">8</button>
+                <button class="dtmf-key" data-value="9">9</button>
+                <button class="dtmf-key" data-value="*">*</button>
+                <button class="dtmf-key" data-value="0">0</button>
+                <button class="dtmf-key" data-value="#">#</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="js/sip.js?v=5"></script>
+    <script src="js/app.js?v=5"></script>
 </body>
 </html>

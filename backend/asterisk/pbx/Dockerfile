@@ -18,14 +18,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     default-libmysqlclient-dev \
     libsrtp2-dev \
+    libopus-dev \
+    libogg-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/src
 RUN curl -sSLO https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-${ASTERISK_VERSION}.tar.gz \
     && tar xzf asterisk-${ASTERISK_VERSION}.tar.gz
 WORKDIR /usr/src/asterisk-${ASTERISK_VERSION}
-RUN ./configure --with-pjproject-bundled --with-jansson-bundled --with-mysqlclient --with-srtp
-RUN make menuselect/menuselect menuselect-tree && make -j$(nproc) && make install && make config && ldconfig
+RUN ./configure --with-pjproject-bundled --with-jansson-bundled --with-mysqlclient --with-srtp \
+    && make -j$(nproc) && make install && make config && ldconfig
+RUN curl -sSLO https://downloads.digium.com/pub/telephony/codec_opus/asterisk-20.0/x86-64/codec_opus-20.0_1.3.0-x86_64.tar.gz \
+    && tar xzf codec_opus-20.0_1.3.0-x86_64.tar.gz \
+    && cp codec_opus-20.0_1.3.0-x86_64/codec_opus.so /usr/lib/asterisk/modules/ \
+    && cp codec_opus-20.0_1.3.0-x86_64/format_ogg_opus.so /usr/lib/asterisk/modules/ 2>/dev/null; \
+    cp codec_opus-20.0_1.3.0-x86_64/codec_opus_config-en_US.xml /var/lib/asterisk/documentation/ 2>/dev/null; \
+    rm -rf codec_opus-20.0_1.3.0-x86_64*
 
 FROM debian:bullseye-slim
 
@@ -43,6 +51,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mariadb-client \
     openssl \
     libsrtp2-1 \
+    libopus0 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/lib/asterisk /usr/lib/asterisk

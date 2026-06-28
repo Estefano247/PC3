@@ -73,6 +73,7 @@ callerid = "${displayName}" <${extension}>
 webrtc = yes
 transport = transport-ws
 identify_by = username
+direct_media = no
 
 [${extension}-auth]
 type = auth

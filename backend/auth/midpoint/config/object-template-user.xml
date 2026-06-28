@@ -38,26 +38,4 @@
         </target>
     </mapping>
 
-    <mapping>
-        <name>Set role metadata</name>
-        <strength>weak</strength>
-        <expression>
-            <script>
-                <code><![CDATA[
-                    // Map the role assignment from user to resource attribute
-                    def user = focus
-                    def role = user.getAssignment()
-                        .find { it.getTargetRef() != null }?.getTargetRef()?.getOid()
-
-                    if (role == "00000000-0000-0000-0000-000000000010") {
-                        return "AgenteCallCenter"
-                    }
-                    return "User"
-                ]]></code>
-            </script>
-        </expression>
-        <target>
-            <path>role</path>
-        </target>
-    </mapping>
 </objectTemplate>

@@ -20,6 +20,24 @@ services:
       timeout: 5s
       retries: 5
 
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: callcenter-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: pgadmin@example.com
+      PGADMIN_DEFAULT_PASSWORD: pgadmin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    networks:
+      - callcenter-net
+
   midpoint:
     build:
       context: ./backend/auth/midpoint
@@ -88,6 +106,7 @@ services:
       - minio-data:/data
     ports:
       - "9000:9000"
+      - "9001:9001"
     networks:
       - callcenter-net
     healthcheck:
@@ -240,6 +259,64 @@ services:
     networks:
       - callcenter-net
 
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: callcenter-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - callcenter-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: callcenter-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: grafana
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3006:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - callcenter-net
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: callcenter-node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+    networks:
+      - callcenter-net
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: callcenter-postgres-exporter
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-callcenter}:${POSTGRES_PASSWORD:-CallCenter2024!}@db:5432/callcenter?sslmode=disable"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - callcenter-net
+
 networks:
   callcenter-net:
     driver: bridge
@@ -254,3 +331,6 @@ volumes:
   asterisk-log:
   asterisk-recordings:
   minio-data:
+  pgadmin-data:
+  prometheus-data:
+  grafana-data:

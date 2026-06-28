@@ -76,6 +76,19 @@ export class AuthService implements OnApplicationBootstrap {
       if (!passwordValid) {
         throw new UnauthorizedException('Credenciales inválidas');
       }
+    } else {
+      if (!user.sipPassword) {
+        user.sipPassword = crypto.randomBytes(16).toString('hex');
+        this.logger.log(`SIP password auto-generado para ${user.username}`);
+      }
+      if (!user.passwordHash) {
+        const salt = await bcrypt.genSalt();
+        user.passwordHash = await bcrypt.hash(dto.password, salt);
+        this.logger.log(`Password hash generado para ${user.username} (fallback local)`);
+      }
+      if (user.sipPassword || user.passwordHash) {
+        await this.userRepository.save(user);
+      }
     }
 
     return this.generateToken(user);
@@ -183,8 +196,8 @@ export class AuthService implements OnApplicationBootstrap {
     const seedUsers = [
       { name: 'admin1', fullName: 'Admin Uno', email: 'admin1@callcenter.local', password: 'sip3001pass', telephoneNumber: '3001' },
       { name: 'admin2', fullName: 'Admin Dos', email: 'admin2@callcenter.local', password: 'sip3002pass', telephoneNumber: '3002' },
-      { name: 'agente1', fullName: 'Agente Uno', email: 'agente1@callcenter.local', password: 'sip3005pass', telephoneNumber: '3005' },
-      { name: 'agente2', fullName: 'Agente Dos', email: 'agente2@callcenter.local', password: 'sip3006pass', telephoneNumber: '3006' },
+      { name: 'agente1', fullName: 'Agente Uno', email: 'agente1@callcenter.local', password: 'sip3005pass', telephoneNumber: '3003' },
+      { name: 'agente2', fullName: 'Agente Dos', email: 'agente2@callcenter.local', password: 'sip3006pass', telephoneNumber: '3004' },
     ];
 
     const userXml = (u: typeof seedUsers[0]) => `<?xml version="1.0" encoding="UTF-8"?>

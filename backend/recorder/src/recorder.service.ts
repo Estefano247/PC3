@@ -138,15 +138,40 @@ export class RecorderService implements OnApplicationBootstrap, OnApplicationShu
     this.pendingUploads.clear();
   }
 
+  private async waitForStableFile(filePath: string): Promise<boolean> {
+    for (let attempt = 0; attempt < 12; attempt++) {
+      try {
+        const size1 = (await fs.promises.stat(filePath)).size;
+        await this.delay(2000);
+        const size2 = (await fs.promises.stat(filePath)).size;
+        if (size1 === size2 && size1 > 44) return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
   private async uploadFile(filePath: string) {
     const filename = path.basename(filePath);
-
-    if (this.uploadedLog.has(filename)) return;
 
     try {
       await fs.promises.access(filePath, fs.constants.R_OK);
     } catch {
       return;
+    }
+
+    if (!(await this.waitForStableFile(filePath))) return;
+
+    const localSize = (await fs.promises.stat(filePath)).size;
+
+    if (this.uploadedLog.has(filename)) {
+      try {
+        const obj = await this.minioClient.statObject(this.bucketName, filename);
+        if (obj.size === localSize) return;
+      } catch {
+        // object missing or different size, re-upload
+      }
     }
 
     try {

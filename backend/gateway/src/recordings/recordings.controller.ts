@@ -8,7 +8,6 @@ export class RecordingsController {
   private readonly logger = new Logger(RecordingsController.name);
   private readonly minioClient: Minio.Client;
   private readonly bucketName: string;
-  private readonly publicEndpoint: string;
 
   constructor() {
     const minioHost = process.env.MINIO_HOST || 'minio';
@@ -21,12 +20,52 @@ export class RecordingsController {
       secretKey: process.env.MINIO_SECRET_KEY || 'minioadmin123',
     });
     this.bucketName = process.env.MINIO_BUCKET || 'recordings';
-    this.publicEndpoint = process.env.MINIO_PUBLIC_ENDPOINT || `localhost:${minioPort}`;
   }
 
   private replaceMinioHost(url: string): string {
     const internalHost = `${process.env.MINIO_HOST || 'minio'}:${Number(process.env.MINIO_PORT) || 9000}`;
-    return url.split(`://${internalHost}`).join(`://${this.publicEndpoint}`);
+    const path = url.split(`://${internalHost}`)[1] || url;
+    return `/minio${path}`;
+  }
+
+  private async getWavDuration(name: string): Promise<number> {
+    try {
+      const stream: any = await this.minioClient.getPartialObject(this.bucketName, name, 0, 4096);
+      const chunks: Buffer[] = [];
+      await new Promise<void>((resolve, reject) => {
+        stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+        stream.on('end', () => resolve());
+        stream.on('error', reject);
+      });
+      const buf = Buffer.concat(chunks);
+      if (buf.length < 12 || buf.toString('ascii', 0, 4) !== 'RIFF') return 0;
+      let sampleRate = 0, channels = 0, bitsPerSample = 0;
+      let offset = 12;
+      while (offset + 8 <= buf.length) {
+        const chunkId = buf.toString('ascii', offset, offset + 4);
+        const chunkSize = buf.readUInt32LE(offset + 4);
+        if (chunkId === 'fmt ') {
+          if (offset + 24 > buf.length) return 0;
+          const audioFormat = buf.readUInt16LE(offset + 8);
+          if (audioFormat !== 1 && audioFormat !== 0xFFFE) return 0;
+          channels = buf.readUInt16LE(offset + 10);
+          sampleRate = buf.readUInt32LE(offset + 12);
+          bitsPerSample = buf.readUInt16LE(offset + 22);
+          offset += 8 + chunkSize;
+          continue;
+        }
+        if (chunkId === 'data') {
+          const dataSize = chunkSize;
+          if (!sampleRate || !channels || !bitsPerSample) return 0;
+          const bytesPerSec = sampleRate * channels * (bitsPerSample / 8);
+          return Math.round(dataSize / bytesPerSec);
+        }
+        offset += 8 + chunkSize + (chunkSize % 2);
+      }
+      return 0;
+    } catch {
+      return 0;
+    }
   }
 
   @Get()
@@ -65,10 +104,12 @@ export class RecordingsController {
               this.logger.warn(`Could not generate presigned URL for ${item.name}: ${err.message}`);
             }
             const parts = item.name.replace('.wav', '').split('-');
+            const duration = await this.getWavDuration(item.name);
             return {
               key: item.name,
               caller: parts[1] || '',
               callee: parts[2] || '',
+              duration,
               size: item.size,
               lastModified: item.lastModified,
               url: presignedUrl,
