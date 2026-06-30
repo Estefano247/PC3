@@ -35,12 +35,50 @@ export class AuthService implements OnApplicationBootstrap {
   }
 
   private async backgroundImport() {
-    try {
-      await this.importMidpointConfigs();
-      await this.importMidpointUsers();
-    } catch (err) {
-      this.logger.error(`midPoint import failed: ${err.message}`);
+    const checkInterval = 30000;
+    while (true) {
+      try {
+        const allImported = await this.ensureMidpointImport();
+        if (allImported) {
+          this.logger.log('All midPoint configs and users imported successfully');
+          return;
+        }
+      } catch (err) {
+        this.logger.warn(`midPoint import attempt failed: ${err.message}`);
+      }
+      await this.delay(checkInterval);
     }
+  }
+
+  private async ensureMidpointImport(): Promise<boolean> {
+    try {
+      const { statusCode } = await this.httpRequest(this.midpointUrl);
+      if (statusCode !== 200 && statusCode !== 302) return false;
+    } catch {
+      this.logger.warn('midPoint not reachable yet, will retry...');
+      return false;
+    }
+
+    await this.importMidpointConfigs();
+
+    const basicAuth = Buffer.from(`${this.adminUser}:${this.adminPass}`).toString('base64');
+    const seedUsers = ['admin1', 'admin2', 'agente1', 'agente2'];
+    for (const username of seedUsers) {
+      try {
+        const { statusCode } = await this.httpRequest(`${this.midpointUrl}/ws/rest/users/${username}`, {
+          headers: { Authorization: `Basic ${basicAuth}` },
+        });
+        if (statusCode === 404) {
+          this.logger.log(`midPoint user ${username} not found, importing...`);
+          await this.importMidpointUsers();
+          return false;
+        }
+      } catch {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   async login(dto: LoginDto) {
@@ -54,15 +92,20 @@ export class AuthService implements OnApplicationBootstrap {
     }
 
     let authenticated = false;
+    let midpointRole: string | null = null;
 
     try {
       const basicAuth = Buffer.from(`${dto.username}:${dto.password}`).toString('base64');
-      const { statusCode } = await this.httpRequest(`${this.midpointUrl}/ws/rest/users/self`, {
+      const { statusCode, body } = await this.httpRequest(`${this.midpointUrl}/ws/rest/users/self`, {
         headers: { Authorization: `Basic ${basicAuth}` },
       });
       authenticated = statusCode >= 200 && statusCode < 300;
       if (authenticated) {
         this.logger.log(`midPoint validated credentials for ${dto.username}`);
+        midpointRole = this.resolveMidpointRole(body);
+        if (midpointRole) {
+          this.logger.log(`midPoint role for ${dto.username}: ${midpointRole}`);
+        }
       }
     } catch (error: any) {
       this.logger.warn(`midPoint unreachable (${error.message}), falling back to local auth`);
@@ -86,12 +129,28 @@ export class AuthService implements OnApplicationBootstrap {
         user.passwordHash = await bcrypt.hash(dto.password, salt);
         this.logger.log(`Password hash generado para ${user.username} (fallback local)`);
       }
-      if (user.sipPassword || user.passwordHash) {
+      if (midpointRole && user.role !== midpointRole) {
+        this.logger.log(`Actualizando rol de ${user.username}: ${user.role} -> ${midpointRole}`);
+        user.role = midpointRole;
+      }
+      if (user.sipPassword || user.passwordHash || midpointRole) {
         await this.userRepository.save(user);
       }
     }
 
     return this.generateToken(user);
+  }
+
+  private resolveMidpointRole(xmlBody: string): string | null {
+    const oids: string[] = [];
+    const regex = /<targetRef\s+oid="([^"]+)"/g;
+    let match;
+    while ((match = regex.exec(xmlBody)) !== null) {
+      oids.push(match[1]);
+    }
+    if (oids.includes('00000000-0000-0000-0000-000000000030')) return 'Admin';
+    if (oids.includes('00000000-0000-0000-0000-000000000010')) return 'AgenteCallCenter';
+    return null;
   }
 
   async register(dto: RegisterDto) {
@@ -136,6 +195,13 @@ export class AuthService implements OnApplicationBootstrap {
     }
   }
 
+  async findAllUsers(): Promise<User[]> {
+    return this.userRepository.find({
+      select: ['id', 'username', 'fullName', 'email', 'role', 'sipExtension', 'enabled', 'createdAt'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   async getProfile(userId: number) {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
@@ -147,57 +213,77 @@ export class AuthService implements OnApplicationBootstrap {
 
   private async importMidpointConfigs() {
     await this.waitForMidpoint();
+
+    // Clean up broken DB resource (no schema) if it exists
+    const resourceOid = 'c0ffee01-c0ff-ee01-c0ff-ee01c0ffee01';
+    const basicAuth = Buffer.from(`${this.adminUser}:${this.adminPass}`).toString('base64');
+    await this.httpRequest(`${this.midpointUrl}/ws/rest/resources/${resourceOid}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Basic ${basicAuth}` },
+    }).catch(() => {});
+
     const configs = [
-      { file: 'resource-scripted-sql.xml', type: 'resources', label: 'DB Resource' },
+      { file: 'role-admin.xml', type: 'roles', label: 'Admin Role' },
       { file: 'role-agentecallcenter.xml', type: 'roles', label: 'AgenteCallCenter Role' },
       { file: 'object-template-user.xml', type: 'objectTemplates', label: 'User Object Template' },
     ];
 
     for (const cfg of configs) {
       const filePath = path.join(this.initDir, cfg.file);
-      try {
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const basicAuth = Buffer.from(`${this.adminUser}:${this.adminPass}`).toString('base64');
-        const oidMatch = content.match(/oid="([^"]+)"/);
-        const oid = oidMatch ? oidMatch[1] : null;
+      let attempts = 0;
+      while (attempts < 3) {
+        attempts++;
+        try {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          const oidMatch = content.match(/oid="([^"]+)"/);
+          const oid = oidMatch ? oidMatch[1] : null;
 
-        if (oid) {
-          await this.httpRequest(`${this.midpointUrl}/ws/rest/${cfg.type}/${oid}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Basic ${basicAuth}` },
-          }).catch(() => {});
+          if (oid) {
+            await this.httpRequest(`${this.midpointUrl}/ws/rest/${cfg.type}/${oid}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Basic ${basicAuth}` },
+            }).catch(() => {});
+          }
+
+          const { statusCode, body } = await this.httpRequest(`${this.midpointUrl}/ws/rest/${cfg.type}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/xml',
+              Accept: 'application/xml',
+              Authorization: `Basic ${basicAuth}`,
+            },
+            body: content,
+          });
+
+          if (statusCode >= 200 && statusCode < 300) {
+            this.logger.log(`${cfg.label} imported (attempt ${attempts})`);
+            break;
+          }
+          if (statusCode === 500 || statusCode === 503) {
+            this.logger.warn(`${cfg.label} attempt ${attempts}/3: HTTP ${statusCode}, retrying...`);
+            await this.delay(10000);
+            continue;
+          }
+          this.logger.error(`Failed to import ${cfg.label}: HTTP ${statusCode} - ${body.substring(0, 300)}`);
+          break;
+        } catch (error: any) {
+          this.logger.warn(`midPoint import ${cfg.file} attempt ${attempts}/3 failed: ${error.message}${attempts < 3 ? ', retrying...' : ''}`);
+          if (attempts < 3) await this.delay(5000);
         }
-
-        const { statusCode, body } = await this.httpRequest(`${this.midpointUrl}/ws/rest/${cfg.type}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/xml',
-            Accept: 'application/xml',
-            Authorization: `Basic ${basicAuth}`,
-          },
-          body: content,
-        });
-
-        if (statusCode >= 200 && statusCode < 300) {
-          this.logger.log(`${cfg.label} imported`);
-        } else {
-          this.logger.error(`Failed to import ${cfg.label}: HTTP ${statusCode} - ${body}`);
-        }
-      } catch (error: any) {
-        this.logger.warn(`midPoint import ${cfg.file} skipped: ${error.message}`);
       }
     }
   }
 
   private async importMidpointUsers() {
     const basicAuth = Buffer.from(`${this.adminUser}:${this.adminPass}`).toString('base64');
-    const roleOid = '00000000-0000-0000-0000-000000000010';
+    const agentRoleOid = '00000000-0000-0000-0000-000000000010';
+    const adminRoleOid = '00000000-0000-0000-0000-000000000030';
 
     const seedUsers = [
-      { name: 'admin1', fullName: 'Admin Uno', email: 'admin1@callcenter.local', password: 'sip3001pass', telephoneNumber: '3001' },
-      { name: 'admin2', fullName: 'Admin Dos', email: 'admin2@callcenter.local', password: 'sip3002pass', telephoneNumber: '3002' },
-      { name: 'agente1', fullName: 'Agente Uno', email: 'agente1@callcenter.local', password: 'sip3005pass', telephoneNumber: '3003' },
-      { name: 'agente2', fullName: 'Agente Dos', email: 'agente2@callcenter.local', password: 'sip3006pass', telephoneNumber: '3004' },
+      { name: 'admin1', fullName: 'Admin Uno', email: 'admin1@callcenter.local', password: 'sip3001pass', telephoneNumber: '3001', roleOid: adminRoleOid },
+      { name: 'admin2', fullName: 'Admin Dos', email: 'admin2@callcenter.local', password: 'sip3002pass', telephoneNumber: '3002', roleOid: agentRoleOid },
+      { name: 'agente1', fullName: 'Agente Uno', email: 'agente1@callcenter.local', password: 'sip3003pass', telephoneNumber: '3003', roleOid: agentRoleOid },
+      { name: 'agente2', fullName: 'Agente Dos', email: 'agente2@callcenter.local', password: 'sip3004pass', telephoneNumber: '3004', roleOid: agentRoleOid },
     ];
 
     const userXml = (u: typeof seedUsers[0]) => `<?xml version="1.0" encoding="UTF-8"?>
@@ -213,14 +299,14 @@ export class AuthService implements OnApplicationBootstrap {
         </password>
     </credentials>
     <assignment>
-        <targetRef oid="${roleOid}" type="c:RoleType"/>
+        <targetRef oid="${u.roleOid}" type="c:RoleType"/>
     </assignment>
     <telephoneNumber>${u.telephoneNumber}</telephoneNumber>
 </user>`;
 
     for (const u of seedUsers) {
       let attempts = 0;
-      while (attempts < 3) {
+      while (attempts < 5) {
         attempts++;
         try {
           const { statusCode, body } = await this.httpRequest(`${this.midpointUrl}/ws/rest/users`, {
@@ -235,18 +321,36 @@ export class AuthService implements OnApplicationBootstrap {
 
           if (statusCode >= 200 && statusCode < 300 || statusCode === 409) {
             this.logger.log(`midPoint user ${u.name} created${statusCode === 409 ? ' (already exists)' : ''}`);
+            try {
+              const existingUser = await this.userRepository.findOne({ where: { username: u.name } });
+              if (existingUser) {
+                const mappedRole = u.roleOid === adminRoleOid ? 'Admin' : 'AgenteCallCenter';
+                if (existingUser.role !== mappedRole) {
+                  existingUser.role = mappedRole;
+                  await this.userRepository.save(existingUser);
+                  this.logger.log(`Synced role for ${u.name}: ${mappedRole}`);
+                }
+              }
+            } catch (syncErr) {
+              this.logger.warn(`Failed to sync role for ${u.name}: ${syncErr.message}`);
+            }
             break;
           }
           if (statusCode === 500 || statusCode === 503) {
-            this.logger.warn(`midPoint user ${u.name} attempt ${attempts}/3 failed: HTTP ${statusCode}, retrying...`);
+            this.logger.warn(`midPoint user ${u.name} attempt ${attempts}/5 failed: HTTP ${statusCode}, retrying...`);
             await this.delay(5000);
             continue;
           }
-          this.logger.warn(`Failed to create midPoint user ${u.name}: HTTP ${statusCode} - ${body}`);
+          if (statusCode === 404) {
+            this.logger.warn(`midPoint user ${u.name} attempt ${attempts}/5: HTTP 404 (midPoint API not ready), retrying...`);
+            await this.delay(10000);
+            continue;
+          }
+          this.logger.warn(`Failed to create midPoint user ${u.name}: HTTP ${statusCode} - ${body.substring(0, 300)}`);
           break;
         } catch (error: any) {
-          this.logger.warn(`midPoint user ${u.name} attempt ${attempts}/3 failed: ${error.message}${attempts < 3 ? ', retrying...' : ''}`);
-          if (attempts < 3) await this.delay(5000);
+          this.logger.warn(`midPoint user ${u.name} attempt ${attempts}/5 failed: ${error.message}${attempts < 5 ? ', retrying...' : ''}`);
+          if (attempts < 5) await this.delay(5000);
         }
       }
     }
@@ -261,7 +365,7 @@ export class AuthService implements OnApplicationBootstrap {
         path: parsedUrl.pathname + parsedUrl.search,
         method: options.method || 'GET',
         headers: options.headers || {},
-        timeout: 15000,
+        timeout: 30000,
       };
       const req = http.request(opts, (res) => {
         let data = '';

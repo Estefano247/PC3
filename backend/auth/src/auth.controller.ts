@@ -27,4 +27,9 @@ export class AuthController {
   async getProfile(data: { userId: number }) {
     return this.authService.getProfile(data.userId);
   }
+
+  @MessagePattern({ cmd: 'auth.users.findAll' })
+  async findAllUsers() {
+    return this.authService.findAllUsers();
+  }
 }

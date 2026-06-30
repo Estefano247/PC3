@@ -15,9 +15,9 @@ Características del frontend WebPhone: llamadas WebRTC con SIP.js, mute/hold, g
 │  ┌──────────────┐    ┌──────────────┐    ┌────────────────────────────────┐    │
 │  │  PostgreSQL 15│    │  midPoint 4.8│    │  Asterisk 20 (PJSIP)           │    │
 │  │              │    │    :8080      │    │  5060/udp+tcp (SIP)            │    │
-│  │  - midpoint  │◄──►│  DatabaseTable│    │  8088/tcp (WS+ARI)             │    │
-│  │  - callcenter│    │  Connector    │    │  10000-10100 (RTP)             │    │
-│  │    . users   │    │  Role RBAC    │    │  MixMonitor (record)           │    │
+│  │  - midpoint  │◄──►│  Role RBAC    │    │  8088/tcp (WS+ARI)             │    │
+│  │  - callcenter│    │  Auth REST    │    │  10000-10100 (RTP)             │    │
+│  │    . users   │    │  Users seed   │    │  MixMonitor (record)           │    │
 │  │    . cdr     │    └──────┬───────┘    └─────────────┬──────────────────┘    │
 │  │    . audit   │           │ REST API                  │ SSH (provision)       │
 │  └──────────────┘           │                           │                        │
@@ -73,6 +73,9 @@ Características del frontend WebPhone: llamadas WebRTC con SIP.js, mute/hold, g
 | Almacenamiento S3 | MinIO | 9000 (API) |
 | Recorder Service | NestJS 10 (TCP microservice) | 3005 |
 | Frontend WebRTC | SIP.js + Nginx (mute/hold) | 3000 |
+| Prometheus | prom/prometheus | 9090 |
+| Grafana | grafana/grafana (dashboards: SLO Dashboard) | 3006 |
+| PostgreSQL Exporter | prometheuscommunity/postgres-exporter | - (red interna) |
 | Softphones | MicroSIP / Zoiper / Linphone | - |
 
 ## Requisitos Previos
@@ -170,7 +173,7 @@ No se requieren cambios de configuración.
 
 El WebPhone permite llamadas entre extensiones desde el navegador usando WebRTC.
 
-> Existen 4 usuarios seed por defecto (admin1, admin2, agente1, agente2). Para probar llamadas entre dos extensiones usa agente1 (3005) y agente2 (3006). Se pueden crear usuarios adicionales desde midPoint (ver sección **Crear usuarios desde midPoint**).
+> Existen 4 usuarios seed por defecto (admin1, admin2, agente1, agente2). Para probar llamadas entre dos extensiones usa agente1 (3003) y agente2 (3004). Se pueden crear usuarios adicionales desde midPoint (ver sección **Crear usuarios desde midPoint**).
 
 ### 1. Iniciar sesión web como admin
 
@@ -179,7 +182,7 @@ Ingresa a `http://localhost:3000` e ingresa:
 | Campo | Valor |
 |-------|-------|
 | Usuario | `agente1` |
-| Contraseña | `sip3005pass` |
+| Contraseña | `sip3003pass` |
 
 Haz clic en **Iniciar sesión**. Si todo funciona, se autenticará contra el backend
 y automáticamente registrará la extensión SIP 3005. Verás "Registrado como 3005" con el
@@ -191,14 +194,15 @@ Antes de probar llamadas, crea un segundo usuario desde midPoint:
 
 1. Ingresa a `http://localhost:8080/midpoint` (usuario: `administrator`, contraseña: `Chang3M3!`)
 2. Ve a **Usuarios → Nuevo usuario**
-3. Completa **Name** (ej: `agente2`), **Full name** (ej: `Agente 2`), asigna el rol **AgenteCallCenter**
+3. Completa **Name** (ej: `agente3`), **Full name** (ej: `Agente Tres`), asigna el rol **AgenteCallCenter**
 4. Guarda el usuario
-5. midPoint provisiona automáticamente la extensión SIP en Asterisk (esto puede tardar unos segundos)
+5. Tras crear el usuario en midPoint, inicia sesión en el WebPhone con ese usuario.
+   El auth-service detecta el rol desde midPoint y completa el registro.
 
 ### 3. Iniciar sesión con otra extensión
 
-Abre otra pestaña/ventana en `http://localhost:3000`, ingresa `agente2` / `sip3006pass`
-y haz clic en **Iniciar sesión**. El SIP se registrará automáticamente como extensión 3006.
+Abre otra pestaña/ventana en `http://localhost:3000`, ingresa `agente2` / `sip3004pass`
+y haz clic en **Iniciar sesión**. El SIP se registrará automáticamente como extensión 3004.
 
 ### 4. Hacer una llamada
 
@@ -274,11 +278,20 @@ pc3/
 │   │       ├── Dockerfile           # Imagen personalizada midPoint 4.8
 │   │       ├── config/
 │   │       │   ├── config.xml               # Config repositorio PostgreSQL
-│   │       │   ├── resource-scripted-sql.xml # Recurso DatabaseTableConnector
-│   │       │   ├── role-agentecallcenter.xml # Rol con inducción
+│   │       │   ├── role-admin.xml           # Rol Admin (sin inducción)
+│   │       │   ├── role-agentecallcenter.xml # Rol AgenteCallCenter (sin inducción)
 │   │       │   └── object-template-user.xml  # Template con mappings SIP
+│   │       ├── import/
+│   │       │   ├── 00-role-admin.xml        # Rol Admin para auto-import
+│   │       │   ├── 00-role-agentecallcenter.xml
+│   │       │   ├── 00-object-template-user.xml
+│   │       │   ├── 01-user-admin1.xml       # Seed users XML
+│   │       │   ├── 02-user-admin2.xml
+│   │       │   ├── 03-user-agente1.xml
+│   │       │   └── 04-user-agente2.xml
 │   │       └── scripts/
-│   │           └── init-midpoint.sh          # Entrypoint simplificado
+│   │           ├── init-midpoint.sh         # Entrypoint simplificado
+│   │           └── import-midpoint.sh       # Import manual via curl
 │   │
 │   ├── cdr/                         # CDR Service (TCP:3003)
 │   │   ├── package.json
@@ -365,11 +378,24 @@ pc3/
 │       ├── trivy-scan.sh           # Escaneo vulnerabilidades
 │       └── test-tls-sip.sh         # Verificación cifrado TLS
 │
+├── monitoring/                      # Monitoreo (Prometheus + Grafana)
+│   ├── prometheus/
+│   │   ├── prometheus.yml           # Scrape config (api-gateway, postgres)
+│   │   └── alerts.yml              # Reglas de alerta (6 alertas)
+│   └── grafana/
+│       ├── dashboards/
+│       │   └── slo-dashboard.json   # Dashboard SLO (19 paneles)
+│       └── provisioning/
+│           ├── datasources/        # Prometheus + PostgreSQL
+│           └── dashboards/         # Auto-provisioning
+│
 └── docs/                            # Documentación del proyecto
     ├── architecture.md              # Diagrama de red y flujo
+    ├── endpoints-and-credentials.md # Endpoints, credenciales, variables
     ├── integration-guide.md         # Guía integración midPoint → Asterisk
     ├── iso-compliance.md            # Matriz ISO 27001 / 25010
     ├── kanban-guide.md              # Tablero Kanban
+    ├── monitoring.md               # Monitoreo SLO (Prometheus + Grafana)
     └── user-stories.md              # User Stories (US-001 a US-016)
 ```
 
@@ -387,6 +413,9 @@ pc3/
 | **CDR Service** | `3003` | Consulta de registros de llamadas (TCP) |
 | **Asterisk Manager** | `3004` | Gestión de extensiones SIP vía SSH (TCP) |
 | **Recorder Service** | `3005` | Upload de grabaciones a MinIO via fs.watch (TCP) |
+| **Prometheus** | `9090` | Métricas y alertas (SLOs, 4 golden signals) |
+| **Grafana** | `3006` | Dashboards de monitoreo (SLO Dashboard) |
+| **PostgreSQL Exporter** | - (red interna) | Exporta métricas de PostgreSQL a Prometheus |
 | **MinIO** | `9000` | API S3 compatible (bucket privado) |
 | **Frontend** | `3000` | WebPhone WebRTC + mute/hold + visor de grabaciones vía API |
 
@@ -422,32 +451,47 @@ Frontend / Cliente HTTP
 
 **Flujo completo:**
 
-1. Usuario se crea en midPoint UI con rol `AgenteCallCenter` (o via API register)
-2. midPoint sincroniza el usuario a `users` en PostgreSQL vía DatabaseTable Connector
+1. Usuarios seed se crean vía `init.sql` en PostgreSQL con extensión SIP y contraseña
+2. Usuarios adicionales se registran via `POST /api/auth/register` (auto-asigna extensión)
 3. **Auth**: `POST /api/auth/login` → gateway → auth-svc
    - auth-svc llama a midPoint REST API con Basic Auth (`GET /ws/rest/users/self`)
-   - Si midPoint responde OK → usuario autenticado
+   - Si midPoint responde OK → usuario autenticado, sincroniza rol desde midPoint
    - Si midPoint no responde → fallback a bcrypt contra la tabla `users`
    - Devuelve JWT con perfil del usuario
 4. **API Extensiones**: `GET/POST/DELETE /api/asterisk/extensions` → gateway → asterisk-svc → SSH → pjsip.conf
 5. **CDR**: `GET /api/cdr` → gateway → cdr-svc → PostgreSQL
-6. Softphone se registra con credenciales sincronizadas
+6. Softphone se registra con credenciales almacenadas en `users`
 
-> **Nota sobre el conector:** midPoint 4.8 no incluye el conector ScriptedSQL por defecto. Se utiliza `DatabaseTableConnector` que autodescubre las columnas de la tabla `users` y las expone como atributos `ri:<column_name>` (ej: `ri:sip_extension`, `ri:full_name`). La provisión vía SSH ahora la realiza exclusivamente el backend (`asterisk-svc`).
+> **Nota:** midPoint se utiliza para autenticación y RBAC. Los roles no incluyen inducción a recursos (el conector DatabaseTable no pudo descubrir el schema de PostgreSQL). La tabla `users` se puebla desde `init.sql` (seed) y vía `register()` del auth-service. Los usuarios creados en midPoint existen solo en su repositorio interno; el auth-service sincroniza el rol al hacer login.
 
 ## Mecanismo de Importación Inicial
 
-En el primer arranque, `auth-svc` ejecuta `importMidpointConfigs()` (en background tras `onApplicationBootstrap`):
-1. Espera a que midPoint esté saludable (GET sobre `/midpoint` cada 5s, máx 120 intentos)
-2. Elimina configs existentes (DELETE por OID) y las vuelve a crear (POST) via REST API:
-   - **Resource** (DatabaseTableConnector → `callcenter.users`)
-   - **Role** `AgenteCallCenter` (con resourceRef al resource)
-   - **Object Template** (con mappings para generación de SIP extension)
-3. También importa 4 usuarios seed (admin1, admin2, agente1, agente2) con rol AgenteCallCenter
-4. La importación se ejecuta en background y no bloquea el inicio del servicio TCP
-5. Los reintentos (3 intentos) manejan errores transitorios de midPoint
+En el primer arranque, `auth-svc` ejecuta en background un loop que reintenta cada 30s:
+1. Espera a que midPoint esté saludable (dependencia `service_healthy` en docker-compose)
+2. Elimina el recurso DB roto (si existe) — `DELETE /ws/rest/resources/c0ffee01-...`
+3. Importa roles y object template via REST API:
+   - **Role** `Admin` (sin inducción a recursos)
+   - **Role** `AgenteCallCenter` (sin inducción a recursos)
+   - **Object Template** (mappings para telephoneNumber)
+4. Verifica si los 4 usuarios seed existen en midPoint (`GET /ws/rest/users/{username}`)
+5. Si falta alguno, los importa via `POST /ws/rest/users` (sin provisioning)
+6. Repite cada 30s hasta que los 4 usuarios estén confirmados
 
-Los endpoints REST utilizados son `DELETE /ws/rest/{type}/{oid}` seguido de `POST /ws/rest/{type}`.
+> **Nota:** Los roles ya no incluyen `<inducement>` a recursos DB (el conector DatabaseTable no puede descubrir el schema de PostgreSQL). Los usuarios se crean en midPoint para autenticación y RBAC, pero no se provisionan a la tabla `users`. Los datos de `users` se manejan desde `init.sql` y `auth.service.register()`.
+
+### Importación manual alternativa
+
+Si el auth-service no logra importar, ejecutar dentro del contenedor midPoint:
+```bash
+docker-compose exec midpoint /opt/midpoint/scripts/import-midpoint.sh
+```
+
+O usando el servicio `midpoint-init` (perfil tools):
+```bash
+docker-compose --profile tools run midpoint-init
+```
+
+El script usa `curl` para importar configs y `midpoint.sh import -raw` para usuarios (sin provisioning).
 
 ## Flujo de Grabaciones
 
@@ -458,6 +502,43 @@ Los endpoints REST utilizados son `DELETE /ws/rest/{type}/{oid}` seguido de `POS
 5. Frontend lista grabaciones desde `GET /api/recordings` (Gateway → MinIO) con autenticación JWT
 6. El gateway genera **URLs pre-firmadas** (válidas 1 hora) para cada archivo, el navegador reproduce con `<audio>` nativo
 7. Las URLs pre-firmadas expiran automáticamente, eliminando acceso público a las grabaciones
+
+## Monitoreo (Prometheus + Grafana)
+
+El sistema incluye monitoreo basado en las **4 Señales Doradas** (tráfico, latencia, errores, saturación) más métricas de runtime, dependencias externas y negocio.
+
+### Métricas principales
+
+| Grupo | Métricas clave | Fuente |
+|-------|---------------|--------|
+| Tráfico | `http_requests_total` (por method, path, status_code) | Gateway (interceptor) |
+| Latencia | `http_request_duration_seconds` (histograma p50/p95/p99) | Gateway (interceptor) |
+| Errores | Tasa derivada de `http_requests_total{status_code=~"5.."}` | Gateway (interceptor) |
+| Saturación | `process_resident_memory_bytes`, `process_cpu_seconds_total` | prom-client default |
+| Runtime | `nodejs_heap_size_used_bytes`, `nodejs_eventloop_lag_seconds` | prom-client default |
+| Microservicios | `microservice_request_duration_seconds`, `microservice_errors_total` | Gateway (AppController) |
+| DB | `pg_stat_database_numbackends` | postgres-exporter |
+| Negocio | `calls_processed_total`, `auth_failures_total`, `active_sessions` | Gateway (AppController) |
+
+El dashboard `SLO Dashboard` tiene 15 paneles con datos: tráfico RPS, latencia p50/p95/p99, tasa de errores, memoria RAM, CPU, heap, event loop lag, file descriptors, latencia y errores de microservicios, calls processed, auth failures, sesiones activas, in-flight requests, up/build info y conexiones DB.
+
+### Alertas configuradas
+
+| Alerta | Condición | Severidad |
+|--------|-----------|-----------|
+| Error rate > 5% | `rate(5xx)/rate(total) > 0.05` por 2m | critical |
+| P95 latencia > 2s | `histogram_quantile(0.95, ...) > 2` por 2m | warning |
+| Memoria > 500MB | `process_resident_memory_bytes > 500MB` por 5m | warning |
+| Servicio caído | `up == 0` por 1m | critical |
+
+### Acceso
+
+| Servicio | URL |
+|----------|-----|
+| Prometheus | `http://localhost:9090` |
+| Grafana | `http://localhost:3006` (admin / grafana) |
+
+Ver [docs/monitoring.md](docs/monitoring.md) para documentación completa.
 
 ## Pruebas
 
@@ -520,9 +601,11 @@ El video debe mostrar:
 | Documento | Descripción |
 |-----------|-------------|
 | [docs/architecture.md](docs/architecture.md) | Diagrama de red, flujo de datos, opciones de frontend |
+| [docs/endpoints-and-credentials.md](docs/endpoints-and-credentials.md) | Endpoints REST, credenciales, variables de entorno |
 | [docs/integration-guide.md](docs/integration-guide.md) | Flujo de aprovisionamiento, DatabaseTable Connector, object templates, troubleshooting |
 | [docs/iso-compliance.md](docs/iso-compliance.md) | Matriz de cumplimiento ISO 27001 e ISO 25010 |
 | [docs/kanban-guide.md](docs/kanban-guide.md) | Configuración del tablero, asignación por fase, reglas del equipo |
+| [docs/monitoring.md](docs/monitoring.md) | Monitoreo SLO — métricas, alertas, dashboard de Grafana |
 | [docs/user-stories.md](docs/user-stories.md) | 16 user stories organizadas en 5 épicas |
 
 ## Equipo

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objectTemplate oid="00000000-0000-0000-0000-000000000020"
+                xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+                xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+                xmlns:t="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+                xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+
+    <name>User Account Template</name>
+    <description>Maps callcenter users to SIP accounts with auto-generated extension</description>
+
+    <mapping>
+        <name>Generate SIP extension for AgenteCallCenter</name>
+        <strength>strong</strength>
+        <expression>
+            <script>
+                <code><![CDATA[
+                    // Auto-generate extension if user has AgenteCallCenter role
+                    // Extensions start at 1100 and increment
+                    import com.evolveum.midpoint.prism.PrismObject
+                    import com.evolveum.midpoint.xml.ns._public.common.common_3.UserType
+
+                    def user = focus
+                    def hasRole = user.getAssignment()
+                        .any { it.getTargetRef() != null && "00000000-0000-0000-0000-000000000010".equals(it.getTargetRef().getOid()) }
+
+                    if (hasRole && user.getTelephoneNumber() == null) {
+                        // Generate next available extension
+                        def maxExt = 1100
+                        // In production, query the resource for max extension
+                        return String.valueOf(maxExt + (Math.abs(user.getName().getOrig().hashCode()) % 100))
+                    }
+                    return user.getTelephoneNumber()
+                ]]></code>
+            </script>
+        </expression>
+        <target>
+            <path>telephoneNumber</path>
+        </target>
+    </mapping>
+
+</objectTemplate>

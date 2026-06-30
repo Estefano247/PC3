@@ -141,11 +141,13 @@ callcenter-net (172.20.0.0/16)
 ```
 1. db              → Inicia PostgreSQL, ejecuta init.sql y init-midpoint.sql
 2. midpoint        → Espera a db (healthy), inicializa esquema midPoint
-3. auth-svc        → Espera a db y midpoint
-                    → Importa 3 configs XML en midPoint vía REST:
-                      • Resource (DatabaseTable Connector → tabla users)
-                      • Role (AgenteCallCenter con inducción)
-                      • Object Template (mappings Groovy para SIP)
+3. auth-svc        → Espera a db y midpoint (healthy)
+                    → Importa configs XML en midPoint vía REST:
+                      • Role Admin (sin inducción)
+                      • Role AgenteCallCenter (sin inducción)
+                      • Object Template (mappings Groovy)
+                    → Importa 4 usuarios seed
+                    → Reintenta cada 30s hasta confirmar
 4. cdr-svc         → Espera a db (healthy)
 5. asterisk        → Espera a midpoint (healthy)
                     → Entrypoint: copia configs por defecto, genera TLS, inicia SSH + Asterisk
@@ -454,18 +456,23 @@ El gateway usa Passport con estrategia JWT. Cada request protegido:
 
 **Configuraciones importadas automáticamente por auth-svc:**
 
-1. **Resource** (DatabaseTable Connector): Conector a PostgreSQL que expone la tabla `users` como recurso midPoint. Columnas mapeadas como atributos `ri:<column_name>` (ej: `ri:sip_extension`, `ri:full_name`).
+1. **Roles** (sin inducción a recursos): `Admin` y `AgenteCallCenter`. Contienen solo la definición del rol sin inducement a recursos DB.
 
-2. **Role** (`AgenteCallCenter`): Rol con inducción que asigna el resource y ejecuta el object template al crear un usuario.
+2. **Object Template**: Mapea `telephoneNumber` del usuario. No se utiliza para provisioning (el conector DatabaseTable no puede descubrir el schema de PostgreSQL).
 
-3. **Object Template**: Mapea datos del usuario de midPoint a las columnas de `users`: genera `sip_extension` (auto-increment) y `sip_password` (password aleatoria).
+> **Nota:** Los roles ya no incluyen `resourceRef` ni inducement. El conector
+> DatabaseTable no pudo descubrir el schema de PostgreSQL (error "No schema in
+> resource"). midPoint se utiliza exclusivamente para autenticación y RBAC.
+> Los usuarios creados en midPoint existen solo en su repositorio interno.
+> La tabla `users` de PostgreSQL se puebla desde `init.sql` (seed data) y
+> desde `auth.service.register()` (nuevos usuarios).
 
-**Flujo de aprovisionamiento midPoint → BD:**
-1. Admin crea usuario en midPoint UI con rol `AgenteCallCenter`
-2. Live Sync detecta el nuevo usuario en `callcenter.users`
-3. midPoint correlaciona por `username`
-4. Object Template genera `sip_extension` y `sip_password`
-5. Escribe los valores en la tabla `users`
+**Flujo de autenticación con midPoint:**
+1. Usuario existe en midPoint (creado vía import automático o UI)
+2. Login: `auth-svc` valida contra `GET /ws/rest/users/self` con Basic Auth
+3. Si OK: auth-svc extrae el rol del XML de respuesta (`resolveMidpointRole`)
+4. Si el rol difiere del DB local → lo actualiza
+5. Si midPoint no responde → fallback a bcrypt contra `users.password_hash`
 
 ### 6.3 Autenticación (auth-svc)
 
@@ -548,26 +555,30 @@ Uso de variable `$api_upstream` con `resolver 127.0.0.11` (DNS interno de Docker
 
 ## 8. Mecanismo de Importación Inicial (auth-svc)
 
-En el primer arranque, `auth-svc` ejecuta en background:
+En el primer arranque, `auth-svc` ejecuta un loop en background que reintenta cada 30s:
 
 ```
-1. waitForMidpoint()
-   └── Poll cada 5s hasta que GET sobre /midpoint responda 200/302 (máx 120 intentos = 10 min)
+1. backgroundImport() — loop cada 30s
+   └── ensureMidpointImport()
+       ├── GET /midpoint → espera 200/302
+       ├── DELETE /ws/rest/resources/c0ffee01-... → limpia resource roto
+       ├── importMidpointConfigs()
+       │   ├── DELETE + POST /ws/rest/roles → role-admin.xml
+       │   ├── DELETE + POST /ws/rest/roles → role-agentecallcenter.xml
+       │   └── DELETE + POST /ws/rest/objectTemplates → object-template-user.xml
+       └── importMidpointUsers() — solo si falta algún user
+           └── POST /ws/rest/users → 4 usuarios seed (admin1, admin2, agente1, agente2)
+               └── Reintenta 5 veces en caso de error
 
-2. importMidpointConfigs()
-   ├── DELETE /ws/rest/resources/{oid} (si existe)
-   ├── POST  /ws/rest/resources       → resource-scripted-sql.xml
-   ├── DELETE /ws/rest/roles/{oid}    (si existe)
-   ├── POST  /ws/rest/roles           → role-agentecallcenter.xml
-   ├── DELETE /ws/rest/objectTemplates/{oid} (si existe)
-   └── POST  /ws/rest/objectTemplates → object-template-user.xml
-
-3. importMidpointUsers()
-   └── POST /ws/rest/users → 4 usuarios seed (admin1, admin2, agente1, agente2)
-       └── Reintenta 3 veces en caso de error HTTP 500/503
+2. Cuando los 4 usuarios responden 200 → loop termina
 ```
 
-Fire-and-forget: no bloquea el inicio del servicio TCP.
+Importación manual alternativa:
+```bash
+docker-compose exec midpoint /opt/midpoint/scripts/import-midpoint.sh
+```
+
+El script usa `curl` para configs y `midpoint.sh import -raw` para usuarios (sin provisioning).
 
 ---
 
@@ -577,8 +588,8 @@ Fire-and-forget: no bloquea el inicio del servicio TCP.
 |---------|-----------|----------|-----|--------|
 | `admin1` | `sip3001pass` | 3001 | Admin | init.sql (seed) |
 | `admin2` | `sip3002pass` | 3002 | AgenteCallCenter | init.sql (seed) |
-| `agente1` | `sip3005pass` | 3005 | AgenteCallCenter | init.sql (seed) |
-| `agente2` | `sip3006pass` | 3006 | AgenteCallCenter | init.sql (seed) |
+| `agente1` | `sip3003pass` | 3003 | AgenteCallCenter | init.sql (seed) |
+| `agente2` | `sip3004pass` | 3004 | AgenteCallCenter | init.sql (seed) |
 
 Creados en `backend/cdr/db/init.sql` con hash bcrypt pre-generado.
 `ON CONFLICT (username) DO NOTHING` evita duplicados en reinicios.

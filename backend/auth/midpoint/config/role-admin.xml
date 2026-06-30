@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<role oid="00000000-0000-0000-0000-000000000010"
+<role oid="00000000-0000-0000-0000-000000000030"
       xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
       xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
       xmlns:xsd="http://www.w3.org/2001/XMLSchema">
 
-    <name>AgenteCallCenter</name>
-    <description>Rol para agentes del call center con extensión SIP</description>
-    <displayName>Agente de Call Center</displayName>
+    <name>Admin</name>
+    <description>Rol de administrador del call center</description>
+    <displayName>Administrador</displayName>
 </role>

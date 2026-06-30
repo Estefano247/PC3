@@ -4,9 +4,11 @@ import { JwtModule } from '@nestjs/jwt';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import { RecordingsModule } from './recordings/recordings.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
   imports: [
+    MetricsModule,
     ClientsModule.register([
       {
         name: 'AUTH_SERVICE',

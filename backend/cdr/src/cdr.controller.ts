@@ -22,4 +22,16 @@ export class CdrController {
   async getStats(data: StatsQueryDto) {
     return this.cdrService.getStats(data);
   }
+
+  @MessagePattern({ cmd: 'recording.uploaded' })
+  async recordingUploaded(data: {
+    filename: string;
+    uniqueid: string;
+    caller: string;
+    callee: string;
+    filesize: number;
+    minio_url: string;
+  }) {
+    return this.cdrService.saveRecording(data);
+  }
 }

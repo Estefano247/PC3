@@ -12,7 +12,7 @@
 
 | ID | Como... | Quiero... | Para... | Prioridad | Fase |
 |----|---------|-----------|---------|-----------|------|
-| US-004 | Admin | configurar midPoint con un recurso DatabaseTable Connector | leer usuarios desde PostgreSQL | Alta | 2 |
+| US-004 | Admin | importar usuarios seed y roles en midPoint via REST API | tener identidades para autenticación | Alta | 2 |
 | US-005 | Admin | que midPoint sincronice usuarios con rol AgenteCallCenter | que automaticamente se creen extensiones SIP | Alta | 3 |
 | US-006 | Admin | que midPoint audite quién accedió a qué extensión | cumplir ISO 27001 A.8.16 | Alta | 4 |
 

@@ -1,4 +1,6 @@
-import { Injectable, OnApplicationBootstrap, OnApplicationShutdown, Logger } from '@nestjs/common';
+import { Injectable, OnApplicationBootstrap, OnApplicationShutdown, Logger, Inject } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { firstValueFrom, timeout, catchError, throwError } from 'rxjs';
 import * as Minio from 'minio';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -13,7 +15,9 @@ export class RecorderService implements OnApplicationBootstrap, OnApplicationShu
   private watcher: fs.FSWatcher | null = null;
   private pendingUploads: Map<string, NodeJS.Timeout> = new Map();
 
-  constructor() {
+  constructor(
+    @Inject('CDR_SERVICE') private readonly cdrClient: ClientProxy,
+  ) {
     this.minioClient = new Minio.Client({
       endPoint: process.env.MINIO_HOST || 'minio',
       port: Number(process.env.MINIO_PORT) || 9000,
@@ -178,8 +182,43 @@ export class RecorderService implements OnApplicationBootstrap, OnApplicationShu
       await this.minioClient.fPutObject(this.bucketName, filename, filePath);
       this.uploadedLog.add(filename);
       this.logger.log(`Uploaded: ${filename}`);
+
+      await this.notifyCdrService(filename, localSize);
     } catch (error) {
       this.logger.error(`Failed to upload ${filename}: ${error.message}`);
+    }
+  }
+
+  private async notifyCdrService(filename: string, filesize: number) {
+    try {
+      const baseName = filename.replace(/\.wav$/i, '');
+      const parts = baseName.split('-');
+      const callee = parts.length > 1 ? parts.pop() : '';
+      const caller = parts.length > 1 ? parts.pop() : '';
+      const uniqueid = parts.join('-');
+
+      const minioUrl = `recordings/${filename}`;
+
+      await firstValueFrom(
+        this.cdrClient.send({ cmd: 'recording.uploaded' }, {
+          filename,
+          uniqueid,
+          caller,
+          callee,
+          filesize,
+          minio_url: minioUrl,
+        }).pipe(
+          timeout(5000),
+          catchError(err => {
+            this.logger.warn(`CDR service timeout/error: ${err.message}`);
+            return throwError(() => err);
+          }),
+        ),
+      );
+
+      this.logger.log(`Notified CDR service: ${filename} (caller=${caller}, callee=${callee})`);
+    } catch (error) {
+      this.logger.warn(`Failed to notify CDR service for ${filename}: ${error.message}`);
     }
   }
 

@@ -3,15 +3,16 @@
 ## Arquitectura de Integracion
 
 ```
-+------------------+   DatabaseTable    +--------------+
++------------------+        REST API      +--------------+
 |   PostgreSQL 15   |<----------------->|   midPoint    |
-|  (callcenter DB)  |   Connector       |  (IAM Core)   |
-|    - users        |   (Live Sync)     |               |
+|  (callcenter DB)  |   (Basic Auth)     |  (IAM Core)   |
+|    - users        |                   |               |
 |    - cdr          |                   |  - Object     |
 |    - audit_log    |                   |    Template   |
 +---------+--------+                   |    (Mappings) |
           |                            |  - Role       |
-          |                            |    Inducement |
+          |                            |    (sin       |
+          |                            |    inducement)|
           |                            +-------+-------+
           |                                    | REST API
           |                                    | (Basic Auth)
@@ -47,7 +48,7 @@
 
 ### Gestion de identidad (auth-svc import)
 
-1. **En el arranque**: `auth-svc` importa 4 usuarios seed (admin1, admin2, agente1, agente2) en midPoint via REST API, con rol `AgenteCallCenter` y datos `telephoneNumber`, `fullName`, `emailAddress`
+1. **En el arranque**: `auth-svc` importa roles y object template en midPoint via REST API, luego importa 4 usuarios seed (admin1, admin2, agente1, agente2) con rol `AgenteCallCenter`. Reintenta cada 30s hasta confirmar que los 4 usuarios existen.
 2. **Autenticacion**: Cuando un usuario inicia sesion, `auth-svc` valida contra midPoint (`GET /ws/rest/users/self` con Basic Auth) y cae en fallback a bcrypt local si midPoint no responde
 3. **Perfil**: El JWT contiene `username`, `role`, `sipExtension` y `sipPassword` para que el frontend se registre en Asterisk
 
@@ -66,25 +67,28 @@
 
 | Recurso | OID | Archivo | Proposito |
 |---------|-----|---------|-----------|
-| CallCenter DB | `c0ffee01-c0ff-ee01-c0ff-ee01c0ffee01` | `backend/auth/midpoint/config/resource-scripted-sql.xml` | Conector a PostgreSQL via DatabaseTableConnector (tabla `users`) |
-| Rol AgenteCallCenter | `00000000-0000-0000-0000-000000000010` | `backend/auth/midpoint/config/role-agentecallcenter.xml` | Rol con induccion para aprovisionar SIP |
-| Object Template | `00000000-0000-0000-0000-000000000020` | `backend/auth/midpoint/config/object-template-user.xml` | Mappings Groovy para generacion de extension y password |
+| Rol Admin | `00000000-0000-0000-0000-000000000030` | `backend/auth/midpoint/config/role-admin.xml` | Rol admin sin induccion |
+| Rol AgenteCallCenter | `00000000-0000-0000-0000-000000000010` | `backend/auth/midpoint/config/role-agentecallcenter.xml` | Rol agente sin induccion |
+| Object Template | `00000000-0000-0000-0000-000000000020` | `backend/auth/midpoint/config/object-template-user.xml` | Mappings Groovy para telephoneNumber |
 
 ## Configuracion de Sync en midPoint
 
-1. **Los recursos se importan automaticamente** en el primer arranque por `auth-svc` (background tras `onApplicationBootstrap`):
-   - auth-svc espera a que midPoint este saludable (GET sobre `/midpoint` cada 5s, max 120 intentos)
-   - Elimina configs existentes (DELETE por OID) y las recrea (POST):
-     - `DELETE /ws/rest/resources/{oid}` + `POST /ws/rest/resources` -> resource-scripted-sql.xml
-     - `DELETE /ws/rest/roles/{oid}` + `POST /ws/rest/roles` -> role-agentecallcenter.xml
-     - `DELETE /ws/rest/objectTemplates/{oid}` + `POST /ws/rest/objectTemplates` -> object-template-user.xml
-   - Tambien importa 4 usuarios seed via `POST /ws/rest/users`
-   - Ejecucion fire-and-forget (no bloquea inicio del servicio)
+1. **Los recursos se importan automaticamente** en el primer arranque por `auth-svc` (background loop cada 30s):
+   - auth-svc espera a que midPoint este saludable (dependencia `service_healthy` en docker-compose)
+   - Elimina el recurso DB roto si existe (`DELETE /ws/rest/resources/c0ffee01-...`)
+   - Importa roles y object template via REST API (DELETE + POST)
+   - Verifica si los 4 usuarios seed existen (`GET /ws/rest/users/{username}`)
+   - Si falta alguno, los importa via `POST /ws/rest/users`
+   - Repite hasta confirmar los 4 usuarios
 
-2. **Verificar sincronizacion** en midPoint UI:
-   - Resource -> CallCenter DB -> Synchronization -> Status
-   - Users -> Buscar usuario sincronizado
-   - Los usuarios con rol `AgenteCallCenter` deben tener `sip_extension` y `sip_password` poblados
+2. **Verificar usuarios** en midPoint UI:
+   - Users -> Buscar usuario por nombre (admin1, admin2, agente1, agente2)
+   - Los usuarios existen solo en midPoint (no se provisionan a la tabla `users`)
+
+> **Nota:** El conector DatabaseTable no pudo descubrir el schema de PostgreSQL.
+> Los roles ya no incluyen inducement a recursos. Los usuarios se crean en midPoint
+> exclusivamente para autenticacion y RBAC. La tabla `users` se puebla desde
+> `init.sql` y `auth.service.register()`.
 
 ## Pruebas Unitarias
 
@@ -115,8 +119,8 @@ pwsh tests/integration/test-audit-security.ps1
 
 | Sintoma | Causa | Solucion |
 |---------|-------|----------|
-| midPoint no ve nuevos usuarios | Live Sync no activado | Verificar recurso -> Sync -> Enable |
-| No se genera extension SIP | Mappings del object template no aplican | Verificar que el rol `AgenteCallCenter` este asignado |
+| Usuario no aparece en midPoint | Import automatico fallo | Ejecutar `docker-compose exec midpoint /opt/midpoint/scripts/import-midpoint.sh` |
+| El rol no se refleja en el WebPhone | midPoint no respondio durante login | El auth-service cae a bcrypt local; reintentar login |
 | midPoint no arranca | PostgreSQL no ready | Esperar 2-3 min, verificar `docker compose logs db` |
 | Extension duplicada | Conflictos en tabla `users` | Verificar `sip_extension` unico en BD |
 | Softphone no registra | Puerto no expuesto | Verificar `docker compose ps` puerto 5060/8088 |

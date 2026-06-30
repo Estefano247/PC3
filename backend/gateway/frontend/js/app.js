@@ -10,6 +10,7 @@ let isInCall = false;
 let isReady = false;
 let callStartTime = null;
 let callTimerInterval = null;
+let callTimeout = null;
 let isMuted = false;
 let isOnHold = false;
 let sipDomain = null;
@@ -281,6 +282,7 @@ async function webLogin() {
         setStatus('Sesión iniciada: ' + (userProfile.fullName || userProfile.username));
         UI.webLoginForm.classList.add('hidden');
         if (UI.logoutBtn) UI.logoutBtn.classList.remove('hidden');
+        showAdminPanel((userProfile.role || '').toLowerCase() === 'admin' || (userProfile.username || '').toLowerCase().startsWith('admin'));
         addLogEntry('incoming', userProfile.username, 'Sesión iniciada');
         if (userProfile.sipExtension) {
             await autoRegisterSip(userProfile.sipExtension, result.sip_password || password);
@@ -313,6 +315,7 @@ async function checkExistingSession() {
         setStatus('Sesión activa: ' + (userProfile.fullName || userProfile.username));
         UI.webLoginForm.classList.add('hidden');
         if (UI.logoutBtn) UI.logoutBtn.classList.remove('hidden');
+        showAdminPanel((userProfile.role || '').toLowerCase() === 'admin' || (userProfile.username || '').toLowerCase().startsWith('admin'));
         if (userProfile.sipExtension) {
             UI.sipExtension.value = userProfile.sipExtension;
             if (userProfile.sipPassword) UI.sipPasswordField.value = userProfile.sipPassword;
@@ -494,7 +497,19 @@ function makeCall() {
     UI.callStatusLabel.textContent = 'Llamando...';
     addLogEntry('outgoing', target, 'Llamando');
     const targetUri = 'sip:' + target + '@' + (sipDomain || location.hostname);
+    callTimeout = setTimeout(() => {
+        if (isInCall) return;
+        setStatus('Llamada sin respuesta');
+        UI.callParty.textContent = '---';
+        UI.callStatusLabel.textContent = 'No contestó';
+        UI.callBtn.classList.remove('hidden');
+        UI.hangupBtn.classList.add('hidden');
+        addLogEntry('outgoing', target, 'Sin respuesta');
+        toast('La extensión no está disponible', 'error');
+        if (simpleUser) simpleUser.hangup().catch(() => {});
+    }, 30000);
     simpleUser.call(targetUri).then(() => {
+        if (callTimeout) { clearTimeout(callTimeout); callTimeout = null; }
         isInCall = true;
         isMuted = false;
         isOnHold = false;
@@ -507,6 +522,7 @@ function makeCall() {
         UI.callStatusLabel.textContent = 'En llamada...';
         addLogEntry('outgoing', target, 'Conectada');
     }).catch((err) => {
+        if (callTimeout) { clearTimeout(callTimeout); callTimeout = null; }
         setStatus('Error: ' + err.message);
         UI.callParty.textContent = '---';
         UI.callStatusLabel.textContent = 'Error';
@@ -584,6 +600,7 @@ function logout() {
     UI.callParty.textContent = '---';
     UI.callStatusLabel.textContent = 'Esperando';
     if (UI.logoutBtn) UI.logoutBtn.classList.add('hidden');
+    showAdminPanel(false);
     UI.webLoginForm.classList.remove('hidden');
     UI.sipLoginForm.classList.add('hidden');
     UI.callSection.classList.add('hidden');
@@ -600,6 +617,53 @@ async function loadRecordings() {
     } catch (err) {
         recordingsCache = null;
         UI.recordingsList.innerHTML = '<div class="empty-state">Error al cargar: ' + escHtml(err.message) + '</div>';
+    }
+}
+
+async function loadAdminUsers() {
+    if (!UI.adminUsersList) return;
+    UI.adminUsersList.innerHTML = '<div class="loading"><span class="spinner"></span><p>Cargando usuarios...</p></div>';
+    try {
+        const users = await apiRequest('/admin/users');
+        renderAdminUsers(users);
+    } catch (err) {
+        UI.adminUsersList.innerHTML = '<div class="empty-state">Error al cargar: ' + escHtml(err.message) + '</div>';
+    }
+}
+
+function renderAdminUsers(users) {
+    if (!users || users.length === 0) {
+        UI.adminUsersList.innerHTML = '<div class="empty-state">No hay usuarios registrados</div>';
+        return;
+    }
+    UI.adminUsersList.innerHTML = users.map(u => {
+        const statusClass = u.enabled ? 'admin-user-active' : 'admin-user-inactive';
+        const statusText = u.enabled ? 'Activo' : 'Inactivo';
+        const roleBadge = u.role === 'admin' ? 'admin-badge' : '';
+        return '<div class="admin-user-item">' +
+            '<div class="admin-user-avatar">' + u.username.charAt(0).toUpperCase() + '</div>' +
+            '<div class="admin-user-info">' +
+                '<div class="admin-user-name">' + escHtml(u.fullName || u.username) + ' <span class="admin-user-role ' + roleBadge + '">' + escHtml(u.role) + '</span></div>' +
+                '<div class="admin-user-detail">' + escHtml(u.username) + (u.sipExtension ? ' &middot; Ext. ' + escHtml(u.sipExtension) : '') + '</div>' +
+                '<div class="admin-user-detail">' + escHtml(u.email || '') + ' &middot; ' + new Date(u.createdAt).toLocaleDateString() + '</div>' +
+            '</div>' +
+            '<div class="admin-user-status ' + statusClass + '">' + statusText + '</div>' +
+        '</div>';
+    }).join('');
+}
+
+function showAdminPanel(show) {
+    const tab = document.getElementById('adminTab');
+    const tabBtn = document.querySelector('[data-tab="admin"]');
+    if (tab && tabBtn) {
+        if (show) {
+            tabBtn.classList.remove('hidden');
+        } else {
+            tabBtn.classList.add('hidden');
+            if (document.querySelector('.tab.active[data-tab="admin"]')) {
+                switchTab('phone');
+            }
+        }
     }
 }
 
@@ -661,6 +725,7 @@ function switchTab(tabId) {
     if (tabId === 'recordings') loadRecordings();
     if (tabId === 'contacts') renderContacts(UI.contactsSearch.value);
     if (tabId === 'history') renderHistory();
+    if (tabId === 'admin') loadAdminUsers();
 }
 
 function init() {
@@ -722,6 +787,7 @@ function init() {
     });
 
     if (UI.refreshRecordings) UI.refreshRecordings.addEventListener('click', loadRecordings);
+    if (document.getElementById('refreshAdminUsers')) document.getElementById('refreshAdminUsers').addEventListener('click', loadAdminUsers);
     if (UI.recordingsSearch) UI.recordingsSearch.addEventListener('input', () => {
         if (recordingsCache) renderRecordings(recordingsCache);
     });

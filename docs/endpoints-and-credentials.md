@@ -24,6 +24,9 @@
 | **Asterisk Manager** | `callcenter-asterisk-svc` | — | 3004 | `asterisk-svc:3004` (TCP) |
 | **Recorder Service** | `callcenter-recorder-svc` | — | 3005 | `recorder-svc:3005` (TCP) |
 | **Frontend** | `callcenter-frontend` | `3000` | 80 | `http://frontend:80` |
+| **Prometheus** | `callcenter-prometheus` | `9090` | 9090 | `http://prometheus:9090` |
+| **Grafana** | `callcenter-grafana` | `3006` | 3000 | `http://grafana:3000` |
+| **PostgreSQL Exporter** | `callcenter-postgres-exporter` | — | 9187 | `db:9187` |
 
 ### URLs de acceso (desde el host)
 
@@ -35,6 +38,8 @@
 | pgAdmin | `http://localhost:5050` |
 | MinIO Console | `http://localhost:9001` |
 | MinIO API | `http://localhost:9000` |
+| Prometheus | `http://localhost:9090` |
+| Grafana | `http://localhost:3006` |
 
 ---
 
@@ -45,9 +50,9 @@
 | Usuario | Contraseña | Ext. SIP | Rol |
 |---------|-----------|----------|-----|
 | `admin1` | `sip3001pass` | `3001` | Admin |
-| `admin2` | `sip3002pass` | `3002` | Admin |
-| `agente1` | `sip3005pass` | `3005` | AgenteCallCenter |
-| `agente2` | `sip3006pass` | `3006` | AgenteCallCenter |
+| `admin2` | `sip3002pass` | `3002` | AgenteCallCenter |
+| `agente1` | `sip3003pass` | `3003` | AgenteCallCenter |
+| `agente2` | `sip3004pass` | `3004` | AgenteCallCenter |
 
 ### midPoint
 
@@ -74,6 +79,12 @@
 | Usuario | Contraseña | Bases de datos |
 |---------|-----------|----------------|
 | `callcenter` | `CallCenter2024!` | `callcenter`, `midpoint` |
+
+### Grafana
+
+| Usuario | Contraseña |
+|---------|-----------|
+| `admin` | `grafana` |
 
 ### pgAdmin
 
@@ -192,6 +203,7 @@ DOCKER_NETWORK_SUBNET=172.20.0.0/16
 | `POST` | `/api/asterisk/reload` | JWT | Recargar módulo PJSIP |
 | `GET` | `/api/recordings` | JWT | Listar grabaciones (presigned URLs) |
 | `GET` | `/api/recordings/:filename` | JWT | Obtener URL presigned de una grabación |
+| `GET` | `/metrics` | No | Métricas Prometheus (prom-client) |
 
 ### Frontend (nginx proxy)
 
@@ -259,9 +271,9 @@ Sin handlers TCP. Servicio autónomo: watch + upload a MinIO.
 | Archivo | OID | Propósito |
 |---------|-----|-----------|
 | `config.xml` | — | Config repositorio PostgreSQL |
-| `resource-scripted-sql.xml` | `c0ffee01-c0ff-ee01-c0ff-ee01c0ffee01` | Recurso DatabaseTableConnector → `callcenter.users` |
-| `role-agentecallcenter.xml` | `00000000-0000-0000-0000-000000000010` | Rol con inducción SIP |
-| `object-template-user.xml` | `00000000-0000-0000-0000-000000000020` | Template con mappings SIP |
+| `role-admin.xml` | `00000000-0000-0000-0000-000000000030` | Rol Admin (sin inducción) |
+| `role-agentecallcenter.xml` | `00000000-0000-0000-0000-000000000010` | Rol AgenteCallCenter (sin inducción) |
+| `object-template-user.xml` | `00000000-0000-0000-0000-000000000020` | Template con mappings telephoneNumber |
 
 ### PostgreSQL (`backend/cdr/db/`)
 

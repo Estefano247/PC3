@@ -60,6 +60,7 @@ services:
     volumes:
       - midpoint-data:/opt/midpoint/var
       - ./backend/auth/midpoint/config/config.xml:/opt/midpoint/var/config.xml
+      - ./backend/auth/midpoint/import:/opt/midpoint/var/import
     ports:
       - "8080:8080"
     networks:
@@ -126,6 +127,8 @@ services:
         condition: service_healthy
       asterisk:
         condition: service_started
+      cdr-svc:
+        condition: service_started
     environment:
       NODE_ENV: production
       MINIO_HOST: minio
@@ -133,8 +136,10 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin123
       MINIO_BUCKET: recordings
+      RECORDINGS_DIR: /recordings
+      CDR_HOST: cdr-svc
     volumes:
-      - asterisk-recordings:/recordings:ro
+      - asterisk-recordings:/recordings:rw
     expose:
       - "3005"
     networks:
@@ -150,7 +155,7 @@ services:
       db:
         condition: service_healthy
       midpoint:
-        condition: service_started
+        condition: service_healthy
     environment:
       NODE_ENV: production
       DB_HOST: db
@@ -290,30 +295,36 @@ services:
     networks:
       - callcenter-net
 
-  node-exporter:
-    image: prom/node-exporter:latest
-    container_name: callcenter-node-exporter
-    restart: unless-stopped
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /:/rootfs:ro
-    command:
-      - '--path.procfs=/host/proc'
-      - '--path.sysfs=/host/sys'
-      - '--path.rootfs=/rootfs'
-    networks:
-      - callcenter-net
-
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
     container_name: callcenter-postgres-exporter
     restart: unless-stopped
     environment:
       DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-callcenter}:${POSTGRES_PASSWORD:-CallCenter2024!}@db:5432/callcenter?sslmode=disable"
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres-exporter/queries.yml
+    volumes:
+      - ./monitoring/prometheus/postgres-queries.yml:/etc/postgres-exporter/queries.yml:ro
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - callcenter-net
+
+  midpoint-init:
+    build:
+      context: ./backend/auth/midpoint
+      dockerfile: Dockerfile
+    container_name: callcenter-midpoint-init
+    profiles:
+      - tools
+    depends_on:
+      midpoint:
+        condition: service_healthy
+    volumes:
+      - ./backend/auth/midpoint/import:/opt/midpoint/var/import
+    environment:
+      ADMIN_PASS: ${MP_PASSWORD:-Chang3M3!}
+    command: ["bash", "/opt/midpoint/scripts/import-midpoint.sh"]
     networks:
       - callcenter-net
 

@@ -1,15 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Cdr } from './cdr.entity';
+import { Recordings } from './recordings.entity';
 import { CdrQueryDto } from './dto/cdr-query.dto';
 import { StatsQueryDto } from './dto/stats-query.dto';
 
 @Injectable()
 export class CdrService {
+  private readonly logger = new Logger(CdrService.name);
+
   constructor(
     @InjectRepository(Cdr)
     private readonly cdrRepository: Repository<Cdr>,
+    @InjectRepository(Recordings)
+    private readonly recordingsRepository: Repository<Recordings>,
   ) {}
 
   async findAll(query: CdrQueryDto): Promise<{ data: Cdr[]; total: number }> {
@@ -72,5 +77,43 @@ export class CdrService {
       avgBillsec: Math.round(Number(stats.avgBillsec)) || 0,
       totalDuration: Number(stats.totalDuration) || 0,
     };
+  }
+
+  async saveRecording(data: {
+    filename: string;
+    uniqueid: string;
+    caller: string;
+    callee: string;
+    filesize: number;
+    minio_url: string;
+  }) {
+    try {
+      await this.recordingsRepository.insert({
+        filename: data.filename,
+        uniqueid: data.uniqueid,
+        caller: data.caller,
+        callee: data.callee,
+        filesize: data.filesize,
+        minio_url: data.minio_url,
+      });
+
+      const result = await this.cdrRepository
+        .createQueryBuilder()
+        .update(Cdr)
+        .set({ recordingUrl: data.minio_url })
+        .where('uniqueid = :uniqueid', { uniqueid: data.uniqueid })
+        .execute();
+
+      if (result.affected && result.affected > 0) {
+        this.logger.log(`Updated recording_url for CDR uniqueid=${data.uniqueid}`);
+      } else {
+        this.logger.warn(`No CDR record found for uniqueid=${data.uniqueid}`);
+      }
+
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Failed to save recording metadata: ${error.message}`);
+      return { success: false, error: error.message };
+    }
   }
 }

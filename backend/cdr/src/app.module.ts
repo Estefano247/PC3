@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CdrModule } from './cdr.module';
 import { Cdr } from './cdr.entity';
+import { Recordings } from './recordings.entity';
 
 @Module({
   imports: [
@@ -12,7 +13,7 @@ import { Cdr } from './cdr.entity';
       username: process.env.DB_USERNAME || 'postgres',
       password: process.env.DB_PASSWORD || 'postgres',
       database: process.env.DB_NAME || 'callcenter',
-      entities: [Cdr],
+      entities: [Cdr, Recordings],
       synchronize: false,
     }),
     CdrModule,

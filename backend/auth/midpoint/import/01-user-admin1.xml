@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<user xmlns="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:c="http://midpoint.evolveum.com/xml/ns/public/common/common-3"
+      xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <name>admin1</name>
+    <fullName>Admin Uno</fullName>
+    <emailAddress>admin1@callcenter.local</emailAddress>
+    <credentials>
+        <password>
+            <value>sip3001pass</value>
+        </password>
+    </credentials>
+    <assignment>
+        <targetRef oid="00000000-0000-0000-0000-000000000030" type="c:RoleType"/>
+    </assignment>
+    <telephoneNumber>3001</telephoneNumber>
+</user>
